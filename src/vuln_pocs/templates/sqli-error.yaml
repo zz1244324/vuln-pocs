@@ -1,0 +1,9 @@
+name: mysql-sqli
+request:
+  param: id
+  value: "1'"
+matcher:
+  type: word
+  words: 
+    - "You have an error in your SQL syntax"
+    - "check the manual that corresponds to your MySQL server"
