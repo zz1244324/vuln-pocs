@@ -22,14 +22,19 @@ def main() -> None:
         logging.error(f"URL 不合法: {args.url}")
         logging.error("必须以 http:// 或 https:// 开头")
         return
-    #加载模板    
+    #加载模板
+    num=1
     tpl_dir = Path(__file__).parent / "templates"
-    for path in tpl_dir.glob("*.yaml"):
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for file_tpl in tpl_dir.glob("*.yaml"):
+        data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
         logging.debug(f"加载模板: {data}")
     #请求发送
-        requ=requests.get(args.url,
-                         params={data['request']['param']: data['request']['value']},
+        path = data['request']['path']
+        params=None
+        if 'param' in data['request']:
+            params={data['request']['param']: data['request']['value']}
+        requ=requests.get(args.url + path,
+                         params=params,
                          timeout=5
                          )
     #漏洞判断   
@@ -43,9 +48,10 @@ def main() -> None:
                 if word in requ.text:
                     hit = True
                     break    
+        #输出结果
         if hit:
-            logging.warning(f"{args.url} 有漏洞,类型:{name} ")
+            logging.warning(f"第{num}个模板{args.url} 命中漏洞,类型:{name},响应状态:{requ.status_code} ")
         else:
-            logging.info(f"{args.url} 没发现漏洞:{name}")
+            logging.info(f"第{num}个模板{args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
             logging.debug(f"响应内容: {requ.text[:200]}")  # 只打印前200个字符
- 
+        num+=1
