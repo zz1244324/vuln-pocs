@@ -5,7 +5,6 @@ import yaml
 from pathlib import Path
 
 
-
 def main() -> None:
     #参数设置
     p=argparse.ArgumentParser()
@@ -18,22 +17,36 @@ def main() -> None:
                         format='%(asctime)s - %(levelname)s - %(message)s'
                         )
     #判断url是否合法
+
     if not args.url.startswith(("http://", "https://")):
         logging.error(f"URL 不合法: {args.url}")
         logging.error("必须以 http:// 或 https:// 开头")
         return
+    base = args.url.rstrip("/")
+
     #加载模板
     tpl_dir = Path(__file__).parent / "templates"
     for num,file_tpl in enumerate(tpl_dir.glob("*.yaml"), start=1):
-        data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
+        try:
+            data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            logging.warning(f"第{num}个模板加载失败: {file_tpl.name},错误信息: {e},跳过此模板")
+            continue
         logging.debug(f"加载模板: {data}")
+
     #请求发送
-        path = data['request']['path']
+        path = data['request']['path'].replace("{{BaseURL}}", base)
         params=None
+
+        if path.startswith(("http://", "https://")):
+            url = path
+        else:
+            url = base + path
+
         if 'param' in data['request']:
             params={data['request']['param']: data['request']['value']}
         try:
-            requ=requests.get(args.url + path,
+            requ=requests.get(url=url,
                             params=params,
                             headers=data['request'].get('headers'),
                             timeout=5
@@ -45,6 +58,7 @@ def main() -> None:
             logging.warning(f"请求失败: {e}")
             continue
         logging.debug(f"实际发出的头: {requ.request.headers}")
+
     #漏洞判断
         m=data['matcher']
         name=data['name']
@@ -56,6 +70,7 @@ def main() -> None:
                 if word in requ.text:
                     hit = True
                     break
+
         #输出结果
         if hit:
             logging.warning(f"第{num}个模板{args.url} 命中漏洞,类型:{name},响应状态:{requ.status_code} ")

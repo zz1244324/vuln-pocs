@@ -1,6 +1,6 @@
 name: mysql-sqli
 request:
-  path:  Less-1/
+  path: "{{BaseURL}}/Less-1/"
   param: id
   value: "1'"
 matcher:
