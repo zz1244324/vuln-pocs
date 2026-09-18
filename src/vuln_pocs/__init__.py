@@ -30,7 +30,7 @@ def main() -> None:
         try:
             data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
         except yaml.YAMLError as e:
-            logging.warning(f"第{num}个模板加载失败: {file_tpl.name},错误信息: {e},跳过此模板")
+            logging.warning(f"第{num}个模板加载失败: {file_tpl.name},错误信息:{type(e).__name__},跳过此模板")
             continue
         logging.debug(f"加载模板: {data}")
 
