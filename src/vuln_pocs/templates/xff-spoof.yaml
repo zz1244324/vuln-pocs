@@ -1,0 +1,9 @@
+name: xff-spoof
+request:
+  path: /Less-18/
+  headers:
+    X-Forwarded-For:  127.0.0.1
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/
+matcher:
+  type: word
+  words: ["..."]

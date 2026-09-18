@@ -23,9 +23,8 @@ def main() -> None:
         logging.error("必须以 http:// 或 https:// 开头")
         return
     #加载模板
-    num=1
     tpl_dir = Path(__file__).parent / "templates"
-    for file_tpl in tpl_dir.glob("*.yaml"):
+    for num,file_tpl in enumerate(tpl_dir.glob("*.yaml"), start=1):
         data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
         logging.debug(f"加载模板: {data}")
     #请求发送
@@ -33,11 +32,20 @@ def main() -> None:
         params=None
         if 'param' in data['request']:
             params={data['request']['param']: data['request']['value']}
-        requ=requests.get(args.url + path,
-                         params=params,
-                         timeout=5
-                         )
-    #漏洞判断   
+        try:
+            requ=requests.get(args.url + path,
+                            params=params,
+                            headers=data['request'].get('headers'),
+                            timeout=5
+                            )
+        except requests.exceptions.ConnectionError:
+            logging.error(f"目标不可达，终止扫描: {args.url}")
+            break
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"请求失败: {e}")
+            continue
+        logging.debug(f"实际发出的头: {requ.request.headers}")
+    #漏洞判断
         m=data['matcher']
         name=data['name']
         if m['type'] == 'status':
@@ -47,11 +55,14 @@ def main() -> None:
             for word in m['words']:
                 if word in requ.text:
                     hit = True
-                    break    
+                    break
         #输出结果
         if hit:
             logging.warning(f"第{num}个模板{args.url} 命中漏洞,类型:{name},响应状态:{requ.status_code} ")
         else:
             logging.info(f"第{num}个模板{args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
             logging.debug(f"响应内容: {requ.text[:200]}")  # 只打印前200个字符
-        num+=1
+
+
+if __name__ == "__main__":
+    main()
