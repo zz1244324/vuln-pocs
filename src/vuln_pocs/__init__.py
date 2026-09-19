@@ -3,6 +3,7 @@ import requests
 import argparse
 import yaml
 from pathlib import Path
+import re
 
 
 def main() -> None:
@@ -62,18 +63,48 @@ def main() -> None:
     #漏洞判断
         m=data['matcher']
         name=data['name']
+        bad=0
+        status="clean"
         if m['type'] == 'status':
-            hit = (requ.status_code == m['status'])
-        else:
-            hit = False
-            for word in m['words']:
+            if requ.status_code == m['status']:
+                status="hit"
+
+        elif m['type'] == 'word':
+            for word in m.get('words', []):
                 if word in requ.text:
-                    hit = True
+                    status="hit"
                     break
 
+        elif m['type'] == 'regex':
+            if bad==len(m.get('regex', [])):
+                status="empty"
+            for pattern in m.get('regex', []):
+                if not isinstance(pattern, str):
+                    logging.warning(f"第{num}个模板{name} 的正则规则类型错误: {pattern!r},忽略该条")
+                    bad += 1
+                    continue
+                try:
+                    if re.search(pattern, requ.text , re.I | re.S):
+                        status="hit"
+                        break
+                except re.error as e:
+                    logging.warning(f"第{num}个模板{name} 的正则表达式无效: {pattern},错误信息为: {e}忽略该条")
+                    bad+=1
+            if bad==len(m.get('regex', [])) and bad>0:
+                status="broken"
+
+        else:
+            logging.warning(f"第{num}个模板{name} 不支持的匹配类型: {m['type']},跳过此模板")
+            continue
+
         #输出结果
-        if hit:
-            logging.warning(f"第{num}个模板{args.url} 命中漏洞,类型:{name},响应状态:{requ.status_code} ")
+        if status=="hit":
+            logging.warning(f"第{num}个模板{args.url} 命中漏洞,模板名:{name},响应状态:{requ.status_code} ")
+
+        elif status=="broken":
+            logging.error(f"第{num}个模板{args.url} 的正则规则无效,模板名:{name}")
+        elif status=="empty":
+            logging.error(f"第{num}个模板{args.url} 模板规则为空,模板名:{name}")
         else:
             logging.info(f"第{num}个模板{args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
             logging.debug(f"响应内容: {requ.text[:200]}")  # 只打印前200个字符
