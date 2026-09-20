@@ -1,0 +1,6 @@
+name: size
+request:
+  path: /Less-1/
+matcher:
+  type: size
+  size: 1200
