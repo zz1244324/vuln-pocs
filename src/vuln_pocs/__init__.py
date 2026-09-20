@@ -4,6 +4,7 @@ import argparse
 import yaml
 from pathlib import Path
 import re
+import time
 
 
 def main() -> None:
@@ -17,6 +18,8 @@ def main() -> None:
     logging.basicConfig(level=logging.DEBUG if args.v else logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s'
                         )
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
     #判断url是否合法
 
     if not args.url.startswith(("http://", "https://")):
@@ -34,7 +37,8 @@ def main() -> None:
             except yaml.YAMLError as e:
                 logging.warning(f"第{num}个模板加载失败: {file_tpl.name},错误信息:{type(e).__name__},跳过此模板")
                 continue
-            logging.debug(f"加载模板: {data}")
+            logging.debug(f"加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
+
 
         #请求发送
             path = data['request']['path'].replace("{{BaseURL}}", base)
@@ -47,12 +51,15 @@ def main() -> None:
 
             if 'param' in data['request']:
                 params={data['request']['param']: data['request']['value']}
+            
             try:
+                t_start = time.perf_counter()
                 requ=requests.get(url=url,
                                 params=params,
                                 headers=data['request'].get('headers'),
-                                timeout=5
+                                timeout=data['request'].get('timeout', 5)
                                 )
+                baseline_time = time.perf_counter() - t_start
             except requests.exceptions.ConnectionError:
                 logging.error(f"目标不可达，终止扫描: {args.url}")
                 break
@@ -104,6 +111,32 @@ def main() -> None:
                 else:
                     status="empty"
 
+            elif m['type']=="time":
+                if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
+                    status = "broken"
+                    logging.error(f"timeout({data["request"]["timeout"]})必须大于 sleep({m['sleep']}),模板{name}不可用")
+                if 'payload_value' not in data['request']:
+                    status = "broken"
+                    logging.error(f"payload_value不存在,模板{name}不可用")
+                else:
+
+                    t_start = time.perf_counter()
+                    try:
+                        requ2 = requests.get(url=url,
+                                    params={data['request']['param']: data['request']['payload_value']},
+                                    headers=data['request'].get('headers'),
+                                    timeout=data['request'].get('timeout', 5))
+                    except requests.exceptions.RequestException as e:
+                        logging.warning(f"{url}请求失败{e}")
+                        status = "broken"
+    
+                    else:
+                        payload_time = time.perf_counter() - t_start
+                        if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
+                            status = "hit"
+
+
+
             else:
                 logging.warning(f"第{num}个模板{name} 不支持的匹配类型: {m['type']},跳过此模板")
                 continue
@@ -114,16 +147,16 @@ def main() -> None:
                 logging.warning(f"第{num}个模板{args.url} 命中漏洞,模板名:{name},响应状态:{requ.status_code} ")
 
             elif status=="broken":
-                logging.error(f"第{num}个模板{args.url} 匹配规则无效,模板名:{name}")
+                logging.error(f"第{num}个模板{args.url} 规则无效,模板名:{name}")
             elif status=="empty":
-                logging.error(f"第{num}个模板{args.url} 匹配规则为空,模板名:{name}")
+                logging.error(f"第{num}个模板{args.url} 规则为空,模板名:{name}")
             else:
                 logging.info(f"第{num}个模板{args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
                 logging.debug(f"响应内容: {requ.text[:200]}")  # 只打印前200个字符
 
         #最后保护屏障
         except Exception as e:
-                logging.error(f"第{num}个模板处理异常,跳过: {e}")
+                logging.error(f"第{num}个模板处理异常,跳过,错误为: {e}")
                 continue
 
 if __name__ == "__main__":
