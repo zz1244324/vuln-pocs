@@ -30,14 +30,16 @@ def main() -> None:
 
     #加载模板
     tpl_dir = Path(__file__).parent / "templates"
-    for num,file_tpl in enumerate(tpl_dir.glob("*.yaml"), start=1):
+    files = sorted(tpl_dir.glob("*.yaml"))
+    total = len(files)
+    for num,file_tpl in enumerate(files, start=1):
         try:
             try:
                 data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
             except yaml.YAMLError as e:
-                logging.warning(f"第{num}个模板加载失败: {file_tpl.name},错误信息:{type(e).__name__},跳过此模板")
+                logging.warning(f"[{num}/{total}] 加载失败: {file_tpl.name},错误信息:{type(e).__name__},跳过此模板")
                 continue
-            logging.debug(f"加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
+            logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
 
 
         #请求发送
@@ -51,7 +53,7 @@ def main() -> None:
 
             if 'param' in data['request']:
                 params={data['request']['param']: data['request']['value']}
-            
+
             try:
                 t_start = time.perf_counter()
                 requ=requests.get(url=url,
@@ -66,7 +68,7 @@ def main() -> None:
             except requests.exceptions.RequestException as e:
                 logging.warning(f"请求失败: {e}")
                 continue
-            logging.debug(f"实际发出的头: {requ.request.headers}")
+            logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
 
         #漏洞判断
             m=data['matcher']
@@ -88,7 +90,7 @@ def main() -> None:
                     status="empty"
                 for pattern in m.get('regex', []):
                     if not isinstance(pattern, str):
-                        logging.warning(f"第{num}个模板{name} 的正则规则类型错误: {pattern!r},忽略该条")
+                        logging.warning(f"[{num}/{total}] {name} 的正则规则类型错误: {pattern!r},忽略该条")
                         bad += 1
                         continue
                     try:
@@ -96,7 +98,7 @@ def main() -> None:
                             status="hit"
                             break
                     except re.error as e:
-                        logging.warning(f"第{num}个模板{name} 的正则表达式无效: {pattern},错误信息为: {e}忽略该条")
+                        logging.warning(f"[{num}/{total}] {name} 的正则表达式无效: {pattern},错误信息为: {e}忽略该条")
                         bad+=1
                 if bad==len(m.get('regex', [])) and bad>0:
                     status="broken"
@@ -114,10 +116,10 @@ def main() -> None:
             elif m['type']=="time":
                 if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
                     status = "broken"
-                    logging.error(f"timeout({data["request"]["timeout"]})必须大于 sleep({m['sleep']}),模板{name}不可用")
+                    logging.error(f"[{num}/{total}] timeout({data['request']['timeout']})必须大于 sleep({m['sleep']}),模板{name}不可用")
                 if 'payload_value' not in data['request']:
                     status = "broken"
-                    logging.error(f"payload_value不存在,模板{name}不可用")
+                    logging.error(f"[{num}/{total}] payload_value不存在,模板{name}不可用")
                 else:
 
                     t_start = time.perf_counter()
@@ -127,7 +129,7 @@ def main() -> None:
                                     headers=data['request'].get('headers'),
                                     timeout=data['request'].get('timeout', 5))
                     except requests.exceptions.RequestException as e:
-                        logging.warning(f"{url}请求失败{e}")
+                        logging.warning(f"[{num}/{total}] {url}请求失败{e}")
                         status = "broken"
     
                     else:
@@ -138,25 +140,25 @@ def main() -> None:
 
 
             else:
-                logging.warning(f"第{num}个模板{name} 不支持的匹配类型: {m['type']},跳过此模板")
+                logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
                 continue
 
 
             #输出结果
             if status=="hit":
-                logging.warning(f"第{num}个模板{args.url} 命中漏洞,模板名:{name},响应状态:{requ.status_code} ")
+                logging.warning(f"[{num}/{total}] {args.url} 命中漏洞,模板名:{name},响应状态:{requ.status_code} ")
 
             elif status=="broken":
-                logging.error(f"第{num}个模板{args.url} 规则无效,模板名:{name}")
+                logging.error(f"[{num}/{total}] {args.url} 规则无效,模板名:{name}")
             elif status=="empty":
-                logging.error(f"第{num}个模板{args.url} 规则为空,模板名:{name}")
+                logging.error(f"[{num}/{total}] {args.url} 规则为空,模板名:{name}")
             else:
-                logging.info(f"第{num}个模板{args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
-                logging.debug(f"响应内容: {requ.text[:200]}")  # 只打印前200个字符
+                logging.info(f"[{num}/{total}] {args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
+                logging.debug(f"[{num}/{total}] 响应内容: {requ.text[:200]}")  # 只打印前200个字符
 
         #最后保护屏障
         except Exception as e:
-                logging.error(f"第{num}个模板处理异常,跳过,错误为: {e}")
+                logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
                 continue
 
 if __name__ == "__main__":
