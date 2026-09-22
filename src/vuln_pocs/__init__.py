@@ -75,6 +75,7 @@ def main() -> None:
             name=data['name']
             bad=0
             status="clean"
+            detail=""
             if m['type'] == 'status':
                 if requ.status_code == m['status']:
                     status="hit"
@@ -102,6 +103,7 @@ def main() -> None:
                         bad+=1
                 if bad==len(m.get('regex', [])) and bad>0:
                     status="broken"
+                    detail="正则匹配全部失败"
 
             elif m["type"]=="size":
                 if 'not_size' in m:
@@ -116,10 +118,10 @@ def main() -> None:
             elif m['type']=="time":
                 if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
                     status = "broken"
-                    logging.error(f"[{num}/{total}] timeout({data['request']['timeout']})必须大于 sleep({m['sleep']}),模板{name}不可用")
-                if 'payload_value' not in data['request']:
+                    detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
+                elif 'payload_value' not in data['request']:
                     status = "broken"
-                    logging.error(f"[{num}/{total}] payload_value不存在,模板{name}不可用")
+                    detail="payload_value模板不存在"
                 else:
 
                     t_start = time.perf_counter()
@@ -129,13 +131,15 @@ def main() -> None:
                                     headers=data['request'].get('headers'),
                                     timeout=data['request'].get('timeout', 5))
                     except requests.exceptions.RequestException as e:
-                        logging.warning(f"[{num}/{total}] {url}请求失败{e}")
+                        detail=f"request测试请求失败,{e}"
+
                         status = "broken"
     
                     else:
                         payload_time = time.perf_counter() - t_start
                         if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
                             status = "hit"
+                            detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
 
 
 
@@ -146,10 +150,10 @@ def main() -> None:
 
             #输出结果
             if status=="hit":
-                logging.warning(f"[{num}/{total}] {args.url} 命中漏洞,模板名:{name},响应状态:{requ.status_code} ")
+                logging.warning(f"[{num}/{total}] {args.url} 命中漏洞,模板名:{name}{detail}")
 
             elif status=="broken":
-                logging.error(f"[{num}/{total}] {args.url} 规则无效,模板名:{name}")
+                logging.error(f"[{num}/{total}] {args.url} 规则无效,模板名:{name},原因:{detail}")
             elif status=="empty":
                 logging.error(f"[{num}/{total}] {args.url} 规则为空,模板名:{name}")
             else:
