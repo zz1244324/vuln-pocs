@@ -43,6 +43,12 @@ def main() -> None:
 
 
         #请求发送
+            name=data['name']
+            method = data['request'].get('method', 'GET').upper()
+            if method not in ('GET', 'POST'):
+                logging.warning(f"[{num}/{total}] {name} 不支持的请求方法: {method},跳过此模板")
+                continue
+
             path = data['request']['path'].replace("{{BaseURL}}", base)
             params=None
 
@@ -53,14 +59,14 @@ def main() -> None:
 
             if 'param' in data['request']:
                 params={data['request']['param']: data['request']['value']}
+            kwargs = {'params': params} if method == 'GET' else {'data': params}
 
             try:
                 t_start = time.perf_counter()
-                requ=requests.get(url=url,
-                                params=params,
+                requ=requests.request(method,url,
                                 headers=data['request'].get('headers'),
-                                timeout=data['request'].get('timeout', 5)
-                                )
+                                timeout=data['request'].get('timeout', 5),
+                                **kwargs)
                 baseline_time = time.perf_counter() - t_start
             except requests.exceptions.ConnectionError:
                 logging.error(f"目标不可达，终止扫描: {args.url}")
@@ -72,7 +78,6 @@ def main() -> None:
 
         #漏洞判断
             m=data['matcher']
-            name=data['name']
             bad=0
             status="clean"
             detail=""
@@ -140,7 +145,6 @@ def main() -> None:
                         if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
                             status = "hit"
                             detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
-
 
 
             else:
