@@ -1,8 +1,8 @@
 name: mysql-sqli
 request:
   path: "{{BaseURL}}/Less-1/"
-  param: id
-  value: "1'"
+  param: 
+    id:  "1'"
 matcher:
   type: word
   words: 
