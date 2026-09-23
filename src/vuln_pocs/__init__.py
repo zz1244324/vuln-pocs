@@ -132,13 +132,13 @@ def main() -> None:
                 else:
 
                     t_start = time.perf_counter()
-                    payload_time=data['request']['payload']
-                    kwargs = {'params': payload_time} if method == 'GET' else {'data': payload_time}
+                    payload_time={**data['request'].get('param',{}),**data['request'].get('payload',{})}
+                    kwargs_time = {'params': payload_time} if method == 'GET' else {'data': payload_time}
                     try:
                         requ2 = requests.request(method,url,
                                             headers=data['request'].get('headers'),
                                             timeout=data['request'].get('timeout', 5),
-                                            **kwargs
+                                            **kwargs_time
                                             )
                     except requests.exceptions.RequestException as e:
                         detail=f"request测试请求失败,{e}"
