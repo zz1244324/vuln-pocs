@@ -7,6 +7,63 @@ import re
 import time
 
 
+def build_url (base,path):
+    path = path.replace("{{BaseURL}}", base)
+
+    if path.startswith(("http://", "https://")):
+        url = path
+    else:
+        url = base + path
+    return url
+
+def load_template(file_tpl,num,total):
+    data=None
+    try:
+        data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+            logging.warning(f"[{num}/{total}] 加载失败: {file_tpl.name},...")
+    return(data)
+
+def render(status,num,total,url,name,detail,status_code,text):
+    #击中
+    if status=="hit":
+        logging.warning(f"[{num}/{total}] {url} 命中漏洞,模板名:{name}{detail}")
+    #错误
+    elif status=="broken":
+        logging.error(f"[{num}/{total}] {url} 规则无效,模板名:{name},原因:{detail}")
+    #找不到规则
+    elif status=="empty":
+        logging.error(f"[{num}/{total}] {url} 规则为空,模板名:{name}")
+    #没命中
+    else:
+        logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
+        logging.debug(f"[{num}/{total}] 响应内容: {text}")
+    
+
+def send_request(method,url,headers,timeout,params):
+    time_end=None
+    status=None
+    requ=None
+
+    
+    payload=params
+    kwargs = {'params': payload} if method == 'GET' else {'data': payload}
+    try:
+        t_start = time.perf_counter()
+        requ=requests.request(method,url,
+                            headers=headers,
+                            timeout=timeout,
+                            **kwargs)
+        time_end = time.perf_counter() - t_start
+    except requests.exceptions.ConnectionError:
+        logging.error(f"目标不可达，终止扫描: {url}")
+        status="break"
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"请求失败: {e}")
+        status="continue"
+    return time_end,status,requ
+
+
 def main() -> None:
     #参数设置
     p=argparse.ArgumentParser()
@@ -34,10 +91,8 @@ def main() -> None:
     total = len(files)
     for num,file_tpl in enumerate(files, start=1):
         try:
-            try:
-                data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
-            except yaml.YAMLError as e:
-                logging.warning(f"[{num}/{total}] 加载失败: {file_tpl.name},错误信息:{type(e).__name__},跳过此模板")
+            data=load_template(file_tpl,num,total)
+            if data is None:
                 continue
             logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
 
@@ -49,31 +104,20 @@ def main() -> None:
             if method not in ('GET', 'POST'):
                 logging.warning(f"[{num}/{total}] {name} 不支持的请求方法: {method},跳过此模板")
                 continue
-
-            path = data['request']['path'].replace("{{BaseURL}}", base)
-
-            if path.startswith(("http://", "https://")):
-                url = path
-            else:
-                url = base + path
-            payload=None
-            if 'param' in data['request']:
-                payload=data['request']['param']
-            kwargs = {'params': payload} if method == 'GET' else {'data': payload}
             #发送请求
-            try:
-                t_start = time.perf_counter()
-                requ=requests.request(method,url,
-                                headers=data['request'].get('headers'),
-                                timeout=data['request'].get('timeout', 5),
-                                **kwargs)
-                baseline_time = time.perf_counter() - t_start
-            except requests.exceptions.ConnectionError:
-                logging.error(f"目标不可达，终止扫描: {args.url}")
+            url=build_url(base,data['request']['path'])
+            baseline_time,status_requ,requ=send_request(
+                method,url,
+                data['request'].get('headers'),
+                data['request'].get('timeout', 5),
+                data['request'].get('param'),
+                )
+            if status_requ =="break":
                 break
-            except requests.exceptions.RequestException as e:
-                logging.warning(f"请求失败: {e}")
+
+            if status_requ =="continue":
                 continue
+
             logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
 
         #漏洞判断
@@ -82,6 +126,7 @@ def main() -> None:
             bad=0
             status="clean"
             detail=""
+            text=requ.text[:200] #只打印请求前面的200个
             #模板一
             if m['type'] == 'status':
                 if requ.status_code == m['status']:
@@ -130,48 +175,31 @@ def main() -> None:
                     status = "broken"
                     detail="payload模板不存在"
                 else:
-
-                    t_start = time.perf_counter()
+                    #发送请求
                     payload_time={**data['request'].get('param',{}),**data['request'].get('payload',{})}
-                    kwargs_time = {'params': payload_time} if method == 'GET' else {'data': payload_time}
-                    try:
-                        requ2 = requests.request(method,url,
-                                            headers=data['request'].get('headers'),
-                                            timeout=data['request'].get('timeout', 5),
-                                            **kwargs_time
-                                            )
-                    except requests.exceptions.RequestException as e:
-                        detail=f"request测试请求失败,{e}"
-
+                    payload_time,status_requ_payload,requ2=send_request(
+                        method,url,
+                        data['request'].get('headers'),
+                        data['request'].get('timeout', 5),
+                        payload_time,
+                        )
+                    #漏洞判断
+                    if status_requ_payload:
+                        detail=f"request测试请求失败"
                         status = "broken"
-    
                     else:
-                        payload_time = time.perf_counter() - t_start
                         if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
                             status = "hit"
                             detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
 
-            #不支持的模板
+            #不支持该类型的模板
             else:
                 logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
                 continue
 
-
         #输出结果
-            #击中
-            if status=="hit":
-                logging.warning(f"[{num}/{total}] {args.url} 命中漏洞,模板名:{name}{detail}")
-            #错误
-            elif status=="broken":
-                logging.error(f"[{num}/{total}] {args.url} 规则无效,模板名:{name},原因:{detail}")
-            #找不到规则
-            elif status=="empty":
-                logging.error(f"[{num}/{total}] {args.url} 规则为空,模板名:{name}")
-            #没命中
-            else:
-                logging.info(f"[{num}/{total}] {args.url} 没发现漏洞,模板名:{name},响应状态:{requ.status_code}")
-                logging.debug(f"[{num}/{total}] 响应内容: {requ.text[:200]}")  # 只打印前200个字符
-
+            render(status,num,total,args.url,name,detail,requ.status_code,text)
+            
         #最后保护屏障
         except Exception as e:
                 logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
