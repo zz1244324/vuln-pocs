@@ -63,6 +63,81 @@ def send_request(method,url,headers,timeout,p):
     return cost_time,status,requ
 
 
+def match_status(type,status,requ_status):
+    status="clean" 
+    detail=""
+
+    if requ_status == status:
+        status="hit"
+    return  status, detail
+
+def match_word(type,word,requ_text):
+    status="clean" 
+    detail=""
+
+    for word in word:
+        if word in requ_text:
+            status="hit"
+    return  status, detail
+            
+def match_regex(regex,num,total,name,requ_text):
+    status="clean" 
+    detail=""
+
+    if bad==len(regex):
+        status="empty"
+    for pattern in regex:
+        if not isinstance(pattern, str):
+            logging.warning(f"[{num}/{total}] {name} 的正则规则类型错误: {pattern!r},忽略该条")
+            bad += 1
+            continue
+        try:
+            if re.search(pattern, requ_text , re.I | re.S):
+                status="hit"
+                break
+        except re.error as e:
+            logging.warning(f"[{num}/{total}] {name} 的正则表达式无效: {pattern},错误信息为: {e}忽略该条")
+            bad+=1
+    if bad==len(regex) and bad>0:
+        status="broken"
+        detail="正则匹配全部失败"
+
+    return  status, detail
+
+def match_size(m,requ_content):
+    status="clean" 
+    detail=""
+
+    if 'not_size' in m:
+        if abs(len(requ_content) - m['not_size']) > m.get('tolerance', 0):
+            status="hit"
+    elif 'size' in m:
+        if len(requ_content) ==m.get('size'):
+            status="hit"
+    else:
+        status="empty"
+    return  status, detail
+
+def match_time(m,data,status_requ_payload,payload_time,baseline_time):
+    status="clean" 
+    detail=""
+
+    if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
+        status = "broken"
+        detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m.get('sleep')})"
+    elif 'payload' not in data['request']:
+        status = "broken"
+        detail="payload模板不存在"
+    else:
+        if status_requ_payload:
+            detail=f"request测试请求失败"
+            status = "broken"
+        else:
+            if payload_time - baseline_time > m.get('tolerance', m.get('sleep') / 2):
+                status = "hit"
+                detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
+    return  status, detail
+
 def main() -> None:
     #参数设置
     p=argparse.ArgumentParser()
@@ -121,82 +196,63 @@ def main() -> None:
 
         #漏洞判断
             #初始数据
+
             m=data['matcher']
             bad=0
             status="clean"
             detail=""
             text=requ.text[:200] #只打印请求前面的200个
+        
             #模板一
-            if m['type'] == 'status':
-                if requ.status_code == m['status']:
-                    status="hit"
-            #模板二
-            elif m['type'] == 'word':
-                for word in m.get('words', []):
-                    if word in requ.text:
-                        status="hit"
-                        break
-            #模板三 正则判断 加 报错防御
-            elif m['type'] == 'regex':
-                if bad==len(m.get('regex', [])):
-                    status="empty"
-                for pattern in m.get('regex', []):
-                    if not isinstance(pattern, str):
-                        logging.warning(f"[{num}/{total}] {name} 的正则规则类型错误: {pattern!r},忽略该条")
-                        bad += 1
-                        continue
-                    try:
-                        if re.search(pattern, requ.text , re.I | re.S):
-                            status="hit"
-                            break
-                    except re.error as e:
-                        logging.warning(f"[{num}/{total}] {name} 的正则表达式无效: {pattern},错误信息为: {e}忽略该条")
-                        bad+=1
-                if bad==len(m.get('regex', [])) and bad>0:
-                    status="broken"
-                    detail="正则匹配全部失败"
-            #模板四
-            elif m["type"]=="size":
-                if 'not_size' in m:
-                    if abs(len(requ.content) - m['not_size']) > m.get('tolerance', 0):
-                        status="hit"
-                elif 'size' in m:
-                    if len(requ.content) ==m.get("size"):
-                        status="hit"
-                else:
-                    status="empty"
-            #模板五
-            elif m['type']=="time":
-                if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
-                    status = "broken"
-                    detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
-                elif 'payload' not in data['request']:
-                    status = "broken"
-                    detail="payload模板不存在"
-                else:
-                    #发送请求
-                    payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
-                    payload_time,status_requ_payload,requ2=send_request(
-                        method,url,
-                        data['request'].get('headers'),
-                        data['request'].get('timeout', 5),
-                        payload_params,
-                        )
-                    #漏洞判断
-                    if status_requ_payload:
-                        detail=f"request测试请求失败"
-                        status = "broken"
-                    else:
-                        if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
-                            status = "hit"
-                            detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
 
-            #不支持该类型的模板
-            else:
+            status,detail=match_status(m['status'],requ.status_code)
+
+            
+            #模板二
+        
+            status,detail=match_word(m.get('words', []),requ.text)
+
+            #模板三 正则判断 加 报错防御
+
+            status,detail=match_regex(m.get('regex', []),num,total,name,requ.text)
+
+           
+            #模板四
+
+            status,detail=match_size(m,requ.content)
+
+            
+            #模板五
+            
+
+                   
+            payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
+            payload_time,status_requ_payload,requ2=send_request(
+                method,url,
+                data['request'].get('headers'),
+                data['request'].get('timeout', 5),
+                payload_params,
+                )
+           
+            status,detail=match_time(m,data,status_requ_payload,payload_time,baseline_time)
+
+            matcher_table={
+                'status':match_status,
+                'word':match_word,
+                'regex':match_regex,
+                'size':match_size,
+                'time':match_time:
+            }
+
+            
+                #不支持该类型的模板
+            func= matcher_table.get(m.get('type'))
+            if func is None:
                 logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
                 continue
 
         #输出结果
+
             render(status,num,total,args.url,name,detail,requ.status_code,text)
             
         #最后保护屏障
