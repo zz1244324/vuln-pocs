@@ -40,28 +40,27 @@ def render(status,num,total,url,name,detail,status_code,text):
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
     
 
-def send_request(method,url,headers,timeout,params):
-    time_end=None
+def send_request(method,url,headers,timeout,p):
+    cost_time=None
     status=None
     requ=None
 
     
-    payload=params
-    kwargs = {'params': payload} if method == 'GET' else {'data': payload}
+    kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
         t_start = time.perf_counter()
         requ=requests.request(method,url,
                             headers=headers,
                             timeout=timeout,
                             **kwargs)
-        time_end = time.perf_counter() - t_start
+        cost_time= time.perf_counter() - t_start
     except requests.exceptions.ConnectionError:
         logging.error(f"目标不可达，终止扫描: {url}")
         status="break"
     except requests.exceptions.RequestException as e:
         logging.warning(f"请求失败: {e}")
         status="continue"
-    return time_end,status,requ
+    return cost_time,status,requ
 
 
 def main() -> None:
@@ -176,12 +175,12 @@ def main() -> None:
                     detail="payload模板不存在"
                 else:
                     #发送请求
-                    payload_time={**data['request'].get('param',{}),**data['request'].get('payload',{})}
+                    payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
                     payload_time,status_requ_payload,requ2=send_request(
                         method,url,
                         data['request'].get('headers'),
                         data['request'].get('timeout', 5),
-                        payload_time,
+                        payload_params,
                         )
                     #漏洞判断
                     if status_requ_payload:
