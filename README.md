@@ -3,7 +3,7 @@
 
 ### 快速开始
 
-需要 Python 3.13 + uv
+需要 Python 3.12 + uv
 ```bash
   uv sync                      # 装依赖
   uv run vuln-pocs <目标URL>

@@ -40,14 +40,14 @@ def render(status,num,total,url,name,detail,status_code,text):
     else:
         logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
-    
+
 #发送请求
 def send_request(method,url,headers,timeout,p):
     cost_time=None
     status_requ=None
     requ=None
 
-    
+
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
         t_start = time.perf_counter()
@@ -156,6 +156,16 @@ def match_time(m,requ,data,url,baseline_time):
     return  status, detail
 
 
+#分派表
+matcher_table={
+'status':match_status,
+'word':match_word,
+'regex':match_regex,
+'size':match_size,
+'time':match_time
+}
+
+
 def main() -> None:
     #参数设置
     p=argparse.ArgumentParser()
@@ -181,16 +191,6 @@ def main() -> None:
     tpl_dir = Path(__file__).parent / "templates"
     files = sorted(tpl_dir.glob("*.yaml"))
     total = len(files)
-
-     #分派表
-    matcher_table={
-    'status':match_status,
-    'word':match_word,
-    'regex':match_regex,
-    'size':match_size,
-    'time':match_time
-    }
-
 
     for num,file_tpl in enumerate(files, start=1):
         try:
