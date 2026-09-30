@@ -1,4 +1,4 @@
-name: mysql-sqli
+name: sqli-error
 request:
   path: "{{BaseURL}}/Less-1/"
   param: 
