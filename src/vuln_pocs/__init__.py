@@ -64,6 +64,17 @@ def send_request(method,url,headers,timeout,p):
         status_requ="continue"
     return cost_time,status_requ,requ
 
+#模板检查
+def data_check(required, data,num,total):
+    for path in required:
+        cur = data
+        for key in path:
+            if key not in cur:
+                logging.warning(f"模板[{num}/{total}]缺少必要字段: {key},跳过此模板")
+                return False
+            cur = cur[key]
+    return True
+
 
 #状态判断
 def match_status(m,requ,data,url,baseline_time):
@@ -155,6 +166,22 @@ def match_time(m,requ,data,url,baseline_time):
                 detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
 
+#模板表
+requiered = [
+('name',),
+('request', 'path'),
+('matcher', 'type'),
+]
+
+#专属表
+matcher_requiered = {
+    'word':   [('matcher', 'words')],
+    'status': [('matcher', 'status')],
+    'regex':  [('matcher', 'regex')],
+    'time':   [('matcher', 'sleep')],
+    'size':   [],
+}
+
 
 #分派表
 matcher_table={
@@ -199,6 +226,17 @@ def main() -> None:
                 continue
             logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
 
+            #模板格式检查
+            check = data_check(requiered, data,num,total)
+            if check is False:
+                continue
+
+            #专属检查
+            check_matcher = data_check(matcher_requiered.get(data['matcher'].get('type')), data,num,total)
+            if check_matcher is False:
+                continue
+
+
 
         #请求发送
             name=data['name']
@@ -231,7 +269,7 @@ def main() -> None:
             m=data['matcher']
             text=requ.text[:200] #只打印请求前面的200个
 
-  
+
             func= matcher_table.get(m.get('type'))
             #不支持该类型的模板
             if func is None:
@@ -241,10 +279,9 @@ def main() -> None:
                 status, detail = func(m, requ, data, url, baseline_time)
 
 
-       
             #输出结果
             render(status,num,total,args.url,name,detail,requ.status_code,text)
-            
+
         #最后保护屏障
         except Exception as e:
                 logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
