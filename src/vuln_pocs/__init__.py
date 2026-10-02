@@ -54,10 +54,10 @@ def send_request(method,url,headers,timeout,p):
         requ=requests.request(method,url,
                             headers=headers,
                             timeout=timeout,
+                            proxies={'http': None, 'https': None},
                             **kwargs)
         cost_time= time.perf_counter() - t_start
     except requests.exceptions.ConnectionError:
-        logging.error(f"目标不可达，终止扫描: {url}")
         status_requ="break"
     except requests.exceptions.RequestException as e:
         logging.warning(f"请求失败: {e}")
@@ -254,9 +254,12 @@ def main() -> None:
                 data['request'].get('param'),
                 )
             if status_requ =="break":
+                logging.error(f"目标不可达，终止扫描: {args.url},请检查网络或目标是否可达")
+                logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
                 break
 
             if status_requ =="continue":
+                logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
                 continue
 
             logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
