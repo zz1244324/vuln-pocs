@@ -2,9 +2,9 @@ name: less9-time-blind
 request:
   path: /Less-9/
   param:
-    id: "1"                        
+    id: "1"
   payload:
-    id: "1' AND SLEEP(5)-- -"      
+    id: "1' AND SLEEP(5)-- -"
   timeout: 15
 matcher:
   type: time

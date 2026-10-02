@@ -29,7 +29,6 @@ def load_template(file_tpl,num,total):
 def raw(http_request):
     lines = http_request.splitlines()
     headers={}
-    param={}
     body=len(lines)
     for i, line in enumerate(lines):
         if line=="":
@@ -37,17 +36,14 @@ def raw(http_request):
         if i==0:
             method= line.split(" ")[0]
             path= line.split(" ")[1]
-        if i>body :
-            id=line.split("&")
-            for i_id in id:
-                key=i_id.split("=",1)[0]
-                value=i_id.split("=",1)[1]
-                param[key]=value
         if i>0 and i<body:
             key=line.split(":")[0]
-            value=line.split(":",1)[1]
+            value=line.split(":",1)[1].strip()
             headers[key]=value
-    return method,path,headers,param
+
+    param_str = '\n'.join(lines[body+1:])
+
+    return method,path,headers,param_str
 
 
 #结果判断
@@ -168,8 +164,12 @@ def match_time(m,requ,data,url,baseline_time):
     status="clean" 
     detail=""
     method = data['request'].get('method', 'GET').upper()
-    payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
-
+    try:
+        payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
+    except Exception as e:
+        status = "broken"
+        detail=f"时间判断类模板解析失败,错误为: {e}"
+        return  status, detail
     if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
         status = "broken"
         detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
@@ -250,6 +250,12 @@ def main() -> None:
             if data is None:
                 continue
             logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
+            if 'raw' in data['request']:                        # 模板写的是 raw 写法
+                m, p, h, param_str = raw(data['request']['raw'])
+                data['request']['method']  = m
+                data['request']['path']    = p
+                data['request']['headers'] = h
+                data['request']['param']   = param_str
 
             #模板格式检查
             check = data_check(requiered, data,num,total)
