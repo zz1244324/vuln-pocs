@@ -22,8 +22,33 @@ def load_template(file_tpl,num,total):
     try:
         data = yaml.safe_load(file_tpl.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
-            logging.warning(f"[{num}/{total}] 加载失败: {file_tpl.name},...")
+            logging.warning(f"[{num}/{total}] 加载失败: {file_tpl.name},...{e}")
     return data
+
+#报文解析
+def raw(http_request):
+    lines = http_request.splitlines()
+    headers={}
+    param={}
+    body=len(lines)
+    for i, line in enumerate(lines):
+        if line=="":
+            body=i
+        if i==0:
+            method= line.split(" ")[0]
+            path= line.split(" ")[1]
+        if i>body :
+            id=line.split("&")
+            for i_id in id:
+                key=i_id.split("=",1)[0]
+                value=i_id.split("=",1)[1]
+                param[key]=value
+        if i>0 and i<body:
+            key=line.split(":")[0]
+            value=line.split(":",1)[1]
+            headers[key]=value
+    return method,path,headers,param
+
 
 #结果判断
 def render(status,num,total,url,name,detail,status_code,text):
