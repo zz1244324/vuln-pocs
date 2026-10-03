@@ -192,14 +192,14 @@ def match_time(m,requ,data,url,baseline_time):
     return  status, detail
 
 #模板表
-requiered = [
+required = [
 ('name',),
 ('request', 'path'),
 ('matcher', 'type'),
 ]
 
 #专属表
-matcher_requiered = {
+matcher_required = {
     'word':   [('matcher', 'words')],
     'status': [('matcher', 'status')],
     'regex':  [('matcher', 'regex')],
@@ -258,12 +258,12 @@ def main() -> None:
                 data['request']['param']   = param_str
 
             #模板格式检查
-            check = data_check(requiered, data,num,total)
+            check = data_check(required, data,num,total)
             if check is False:
                 continue
 
             #专属检查
-            check_matcher = data_check(matcher_requiered.get(data['matcher'].get('type')), data,num,total)
+            check_matcher = data_check(matcher_required.get(data['matcher'].get('type')), data,num,total)
             if check_matcher is False:
                 continue
 
