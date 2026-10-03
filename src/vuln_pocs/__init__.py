@@ -163,13 +163,13 @@ def match_size(m,requ,data,url,baseline_time):
 def match_time(m,requ,data,url,baseline_time):
     status="clean" 
     detail=""
-    method = data['request'].get('method', 'GET').upper()
-    try:
-        payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
-    except Exception as e:
+    if not isinstance(data['request'].get('param', {}), dict) or not isinstance(data['request'].get('payload', {}), dict):
         status = "broken"
-        detail=f"时间判断类模板解析失败,错误为: {e}"
-        return  status, detail
+        detail = "该模板的param和payload必须要是字典类型"
+        return status, detail
+    method = data['request'].get('method', 'GET').upper()
+    payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
+
     if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
         status = "broken"
         detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
