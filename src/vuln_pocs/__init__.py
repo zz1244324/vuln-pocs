@@ -33,17 +33,25 @@ def raw(http_request):
     for i, line in enumerate(lines):
         if line=="":
             body=i
+            break #第一个空行之后的就是body了
         if i==0:
             method= line.split(" ")[0]
             path= line.split(" ")[1]
         if i>0 and i<body:
             key=line.split(":")[0]
-            value=line.split(":",1)[1].strip()
+            value=line.split(":",1)[1].strip() #去除空格
             headers[key]=value
 
     param_str = '\n'.join(lines[body+1:])
 
     return method,path,headers,param_str
+
+#嵌套替换
+def replace(text, values):
+    for name, value in values.items():
+        text = text.replace("{{" + name + "}}", value)
+    return text
+
 
 
 #结果判断
@@ -67,7 +75,6 @@ def send_request(method,url,headers,timeout,p):
     cost_time=None
     status_requ=None
     requ=None
-
 
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
@@ -250,7 +257,9 @@ def main() -> None:
             if data is None:
                 continue
             logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
-            if 'raw' in data['request']:                        # 模板写的是 raw 写法
+
+            #模板raw写法解析
+            if 'raw' in data['request']:
                 m, p, h, param_str = raw(data['request']['raw'])
                 data['request']['method']  = m
                 data['request']['path']    = p
