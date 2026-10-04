@@ -5,6 +5,7 @@ import yaml
 from pathlib import Path
 import re
 import time
+import ast
 
 #url构建
 def build_url (base,path):
@@ -58,6 +59,18 @@ def replace(text, values):
             raise ValueError("模板替换迭代次数超过限制")
     return text
 
+#白名单检测
+def calc(node):
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.BinOp):
+        left = calc(node.left)
+        right = calc(node.right)
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Mult):
+            return left * right
+        raise ValueError("不支持该的表达式")
 
 
 #结果判断
