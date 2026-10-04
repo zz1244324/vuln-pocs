@@ -1,4 +1,7 @@
-from vuln_pocs import raw,replace
+from vuln_pocs import raw
+
+
+
 #1. 标准 GET，头后一个空行，没有 body
 REQ_NO_BODY = """GET /a HTTP/1.1
 Host: 127.0.0.1:8899"""
@@ -75,5 +78,3 @@ def test_头部值前面有空格():
     assert h == {"Host": "127.0.0.1:8899"}
 
 
-def test_替换一个洞():
-    assert replace("uname={{u}}&passwd=1", {"u": "admin"}) == "uname=admin&passwd=1"

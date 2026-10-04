@@ -48,8 +48,14 @@ def raw(http_request):
 
 #嵌套替换
 def replace(text, values):
-    for name, value in values.items():
-        text = text.replace("{{" + name + "}}", value)
+    count = 0
+    count_max = 1000  # 设置最大迭代次数以防止无限循环
+    while "{{" in text: #不用顺序,自动排序
+        for name, value in values.items():
+            text = text.replace("{{" + name + "}}", value)
+        count +=1
+        if count >= count_max and "{{" in text:
+            raise ValueError("模板替换迭代次数超过限制")
     return text
 
 
