@@ -70,7 +70,7 @@ def calc(node):
             return left + right
         if isinstance(node.op, ast.Mult):
             return left * right
-        raise ValueError("不支持该的表达式")
+    raise ValueError("不支持该的表达式")
 
 
 #结果判断
