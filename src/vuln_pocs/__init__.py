@@ -8,7 +8,7 @@ import time
 
 #url构建
 def build_url (base,path):
-    path = path.replace("{{BaseURL}}", base)
+    path = replace(path, {"BaseURL": base})
 
     if path.startswith(("http://", "https://")):
         url = path
