@@ -42,7 +42,6 @@ def raw(http_request):
             key=line.split(":")[0]
             value=line.split(":",1)[1].strip() #去除空格
             headers[key]=value
-
     param_str = '\n'.join(lines[body+1:])
 
     return method,path,headers,param_str
@@ -52,20 +51,35 @@ def replace(text, values):
     count = 0
     count_max = 1000  # 设置最大迭代次数以防止无限循环
     while "{{" in text: #不用顺序,自动排序
-        for name, value in values.items():
-            text = text.replace("{{" + name + "}}", value)
+        start = text.find("{{")
+        end   = text.find("}}", start)
+        if end == -1:
+            raise ValueError("模板中存在未闭合的占位符")
+        内容  = text[start+2 : end] 
+        值    = transform(内容, values) 
+        text = text[:start] + str(值) + text[end+2:]
         count +=1
         if count >= count_max and "{{" in text:
             raise ValueError("模板替换迭代次数超过限制")
     return text
 
-#白名单检测
-def calc(node):
+#文本转化节点
+def transform(表达式,values):
+    return calc(ast.parse(表达式).body[0].value, values)
+
+#白名单求值器
+def calc(node,values):
     if isinstance(node, ast.Constant):
-        return node.value
+        if type(node.value) in (int, float):
+            return node.value
+        # 不是数字的，就让它"掉下去"
+    if isinstance(node, ast.Name):
+        if node.id in values:
+            return values[node.id]
+        raise ValueError(f"变量 {node.id} 不存在")
     if isinstance(node, ast.BinOp):
-        left = calc(node.left)
-        right = calc(node.right)
+        left = calc(node.left, values)
+        right = calc(node.right, values)
         if isinstance(node.op, ast.Add):
             return left + right
         if isinstance(node.op, ast.Mult):
