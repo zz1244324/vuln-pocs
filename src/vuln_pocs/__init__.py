@@ -17,6 +17,15 @@ def build_url (base,path):
         url = base + path
     return url
 
+#raw解析后处理
+def render_request(data, base,variables):
+    method,path,headers, body = raw(data.get('request').get('raw'))
+    path = replace(path, variables)
+    body=replace(body, variables)
+    headers = {k: replace(v, variables) for k, v in headers.items()}
+    url=build_url (base,path)
+    return method, url, headers, body
+
 #模板导入
 def load_template(file_tpl,num,total):
     data=None

