@@ -7,6 +7,9 @@ import re
 import time
 import ast
 
+
+
+
 #url构建
 def build_url (base,path):
     path = replace(path, {"BaseURL": base})
@@ -112,16 +115,17 @@ def render(status,num,total,url,name,detail,status_code,text):
         logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
 
+
 #发送请求
 def send_request(method,url,headers,timeout,p):
     cost_time=None
     status_requ=None
     requ=None
-
+    logging.debug(f"session:{id(s)}")
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
         t_start = time.perf_counter()
-        requ=requests.request(method,url,
+        requ=s.request(method,url,
                             headers=headers,
                             timeout=timeout,
                             proxies={'http': None, 'https': None},
@@ -239,6 +243,9 @@ def match_time(m,requ,data,url,baseline_time):
                 status = "hit"
                 detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
+
+#创建会话
+s=requests.Session()
 
 #模板表
 required = [
