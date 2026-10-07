@@ -223,7 +223,7 @@ def match_time(m,requ,data,url,baseline_time):
     method = data['request'].get('method', 'GET').upper()
     payload_params={**data['request'].get('param',{}),**data['request'].get('payload',{})}
 
-    if 'timeout'in data["request"] and data["request"]["timeout"]<m['sleep']:
+    if 'timeout'in data["request"] and data["request"]["timeout"][1]<m['sleep']:
         status = "broken"
         detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
     elif 'payload' not in data['request']:
@@ -314,6 +314,12 @@ def main() -> None:
                 data['request']['path']    = p
                 data['request']['headers'] = h
                 data['request']['param']   = param_str
+            #规范超时
+            if 'timeout' in data['request']:
+                if isinstance(data['request'].get('timeout'), (int,float)):
+                    data['request']['timeout']=(data['request'].get('timeout'),data['request'].get('timeout'))
+                else:
+                    data['request']['timeout']=tuple(data['request'].get('timeout'))
 
             #模板格式检查
             check = data_check(required, data,num,total)

@@ -5,7 +5,7 @@ request:
     id: "1"
   payload:
     id: "1' AND SLEEP(5)-- -"
-  timeout: 15
+  timeout: [2,20]
 matcher:
   type: time
   sleep: 5
