@@ -6,8 +6,8 @@ from pathlib import Path
 import re
 import time
 import ast
-
-
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 
 
 #url构建
@@ -225,7 +225,7 @@ def match_time(m,requ,data,url,baseline_time):
 
     if 'timeout'in data["request"] and data["request"]["timeout"][1]<m['sleep']:
         status = "broken"
-        detail=f"timeout({data['request']['timeout']})值必须大于 sleep({m['sleep']})"
+        detail=f"timeout({data['request']['timeout'][1]})值必须大于 sleep({m['sleep']})"
     elif 'payload' not in data['request']:
         status = "broken"
         detail="payload模板不存在"
@@ -244,8 +244,15 @@ def match_time(m,requ,data,url,baseline_time):
                 detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
 
-#创建会话
-s=requests.Session()
+
+policy = Retry(total=3, backoff_factor=0.3, 
+               status_forcelist=[429, 500, 503, 504])#重放器策略
+adapter = HTTPAdapter(max_retries=policy)#适配器
+s=requests.Session()#创建会话
+#http 和 https 各挂一次（是"替换"，不是"新增"）
+s.mount("http://", adapter)
+s.mount("https://", adapter)
+
 
 #模板表
 required = [
@@ -262,7 +269,6 @@ matcher_required = {
     'time':   [('matcher', 'sleep')],
     'size':   [],
 }
-
 
 #分派表
 matcher_table={
