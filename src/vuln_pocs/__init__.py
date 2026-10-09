@@ -9,6 +9,7 @@ import ast
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 
 
@@ -118,6 +119,7 @@ def render(status,num,total,url,name,detail,status_code,text):
         logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
 
+#运行模板规则
 def scan_template(base, file_tpl, num, total):
     try:
         data=load_template(file_tpl,num,total)
@@ -207,14 +209,20 @@ def scan_template(base, file_tpl, num, total):
 
 #发送请求
 def send_request(method,url,headers,timeout,p):
+    #重新给s属性
+    if getattr(local, 's', None) is None:
+        local.s=requests.Session()#创建会话
+        #http 和 https 各挂一次（是"替换"，不是"新增"）
+        local.s.mount("http://", adapter)
+        local.s.mount("https://", adapter)
     cost_time=None
     status_requ=None
     requ=None
-    logging.debug(f"session:{id(s)}")
+    logging.debug(f"session:{id(local.s)}")
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
         t_start = time.perf_counter()
-        requ=s.request(method,url,
+        requ=local.s.request(method,url,
                             headers=headers,
                             timeout=timeout,
                             proxies={'http': None, 'https': None},
@@ -333,14 +341,11 @@ def match_time(m,requ,data,url,baseline_time):
                 detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
 
-
+local = threading.local()#每个线程各有一份属性
 policy = Retry(total=3, backoff_factor=0.3, 
                status_forcelist=[429, 500, 503, 504])#重放器策略
-adapter = HTTPAdapter(max_retries=policy)#适配器
-s=requests.Session()#创建会话
-#http 和 https 各挂一次（是"替换"，不是"新增"）
-s.mount("http://", adapter)
-s.mount("https://", adapter)
+adapter = HTTPAdapter(max_retries=policy)#适配装载器
+#创建会话在send_request函数
 
 
 #模板表
@@ -395,7 +400,7 @@ def main() -> None:
     files = sorted(tpl_dir.glob("*.yaml"))
     total = len(files)
     #并发限制max_workers=N
-    with ThreadPoolExecutor(max_workers=1) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         futs = []
         for num,file_tpl in enumerate(files, start=1):
             #并发
