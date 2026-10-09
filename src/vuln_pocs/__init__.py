@@ -8,6 +8,9 @@ import time
 import ast
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from concurrent.futures import ThreadPoolExecutor
+
+
 
 
 #url构建
@@ -391,12 +394,14 @@ def main() -> None:
     tpl_dir = Path(__file__).parent / "templates"
     files = sorted(tpl_dir.glob("*.yaml"))
     total = len(files)
-
-    for num,file_tpl in enumerate(files, start=1):
-        scan_template_status=scan_template(base, file_tpl, num, total)
-        if scan_template_status=="break":
-            break
-
+    #并发限制max_workers=N
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        futs = []
+        for num,file_tpl in enumerate(files, start=1):
+            #并发
+            futs.append(ex.submit(scan_template, base, file_tpl, num, total))
+        for f in futs:
+           f.result()
 
 
 if __name__ == "__main__":
