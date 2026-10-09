@@ -354,6 +354,7 @@ def main() -> None:
                 data['request'].get('timeout', 5),
                 data['request'].get('param'),
                 )
+            #网络异常
             if status_requ =="break":
                 logging.error(f"目标不可达，终止扫描: {args.url},请检查网络或目标是否可达")
                 logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
