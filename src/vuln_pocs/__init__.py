@@ -115,6 +115,92 @@ def render(status,num,total,url,name,detail,status_code,text):
         logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
 
+def scan_template(base, file_tpl, num, total):
+    try:
+        data=load_template(file_tpl,num,total)
+        if data is None:
+            return "continue"
+        logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
+
+        #模板raw写法解析
+        if 'raw' in data['request']:
+            m, p, h, param_str = raw(data['request']['raw'])
+            data['request']['method']  = m
+            data['request']['path']    = p
+            data['request']['headers'] = h
+            data['request']['param']   = param_str
+        #规范超时
+        if 'timeout' in data['request']:
+            if isinstance(data['request'].get('timeout'), (int,float)):
+                data['request']['timeout']=(data['request'].get('timeout'),data['request'].get('timeout'))
+            else:
+                data['request']['timeout']=tuple(data['request'].get('timeout'))
+
+        #模板格式检查
+        check = data_check(required, data,num,total)
+        if check is False:
+            return "continue"
+
+        #专属检查
+        check_matcher = data_check(matcher_required.get(data['matcher'].get('type')), data,num,total)
+        if check_matcher is False:
+            return "continue"
+
+
+
+    #请求发送
+        name=data['name']
+        method = data['request'].get('method', 'GET').upper()
+        #判断请求类型
+        if method not in ('GET', 'POST'):
+            logging.warning(f"[{num}/{total}] {name} 不支持的请求方法: {method},跳过此模板")
+            return "continue"
+        #发送请求
+        url=build_url(base,data['request']['path'])
+        baseline_time,status_requ,requ=send_request(
+            method,url,
+            data['request'].get('headers'),
+            data['request'].get('timeout', 5),
+            data['request'].get('param'),
+            )
+        #网络异常
+        if status_requ =="break":
+            logging.error(f"目标不可达，终止扫描: {url},请检查网络或目标是否可达")
+            logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
+            return "break"
+
+        if status_requ =="continue":
+            logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
+            return "continue"
+
+        logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
+
+    #漏洞判断
+
+        #初始话参数
+        # status="clean"
+        # detail=""
+        m=data['matcher']
+        text=requ.text[:200] #只打印请求前面的200个
+
+
+        func= matcher_table.get(m.get('type'))
+        #不支持该类型的模板
+        if func is None:
+            logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
+            return "continue"
+        else:
+            status, detail = func(m, requ, data, url, baseline_time)
+
+
+        #输出结果
+        render(status,num,total,url,name,detail,requ.status_code,text)
+        #最后保护屏障
+    except Exception as e:
+            logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
+            return "continue"
+
+
 
 #发送请求
 def send_request(method,url,headers,timeout,p):
@@ -307,90 +393,11 @@ def main() -> None:
     total = len(files)
 
     for num,file_tpl in enumerate(files, start=1):
-        try:
-            data=load_template(file_tpl,num,total)
-            if data is None:
-                continue
-            logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
-
-            #模板raw写法解析
-            if 'raw' in data['request']:
-                m, p, h, param_str = raw(data['request']['raw'])
-                data['request']['method']  = m
-                data['request']['path']    = p
-                data['request']['headers'] = h
-                data['request']['param']   = param_str
-            #规范超时
-            if 'timeout' in data['request']:
-                if isinstance(data['request'].get('timeout'), (int,float)):
-                    data['request']['timeout']=(data['request'].get('timeout'),data['request'].get('timeout'))
-                else:
-                    data['request']['timeout']=tuple(data['request'].get('timeout'))
-
-            #模板格式检查
-            check = data_check(required, data,num,total)
-            if check is False:
-                continue
-
-            #专属检查
-            check_matcher = data_check(matcher_required.get(data['matcher'].get('type')), data,num,total)
-            if check_matcher is False:
-                continue
+        scan_template_status=scan_template(base, file_tpl, num, total)
+        if scan_template_status=="break":
+            break
 
 
-
-        #请求发送
-            name=data['name']
-            method = data['request'].get('method', 'GET').upper()
-            #判断请求类型
-            if method not in ('GET', 'POST'):
-                logging.warning(f"[{num}/{total}] {name} 不支持的请求方法: {method},跳过此模板")
-                continue
-            #发送请求
-            url=build_url(base,data['request']['path'])
-            baseline_time,status_requ,requ=send_request(
-                method,url,
-                data['request'].get('headers'),
-                data['request'].get('timeout', 5),
-                data['request'].get('param'),
-                )
-            #网络异常
-            if status_requ =="break":
-                logging.error(f"目标不可达，终止扫描: {args.url},请检查网络或目标是否可达")
-                logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
-                break
-
-            if status_requ =="continue":
-                logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
-                continue
-
-            logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
-
-        #漏洞判断
-
-            #初始话参数
-            # status="clean"
-            # detail=""
-            m=data['matcher']
-            text=requ.text[:200] #只打印请求前面的200个
-
-
-            func= matcher_table.get(m.get('type'))
-            #不支持该类型的模板
-            if func is None:
-                logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
-                continue
-            else:
-                status, detail = func(m, requ, data, url, baseline_time)
-
-
-            #输出结果
-            render(status,num,total,args.url,name,detail,requ.status_code,text)
-
-        #最后保护屏障
-        except Exception as e:
-                logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
-                continue
 
 if __name__ == "__main__":
     main()
