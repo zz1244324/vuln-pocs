@@ -120,7 +120,8 @@ def render(status,num,total,url,name,detail,status_code,text):
         logging.debug(f"[{num}/{total}] 响应内容: {text}")
 
 #运行模板规则
-def scan_template(base, file_tpl, num, total):
+def scan_template(base, file_tpl, num, total,stop):
+    if stop.is_set(): return {"status": "skip"}
     try:
         data=load_template(file_tpl,num,total)
         if data is None:
@@ -170,9 +171,14 @@ def scan_template(base, file_tpl, num, total):
             )
         #网络异常
         if status_requ =="break":
-            logging.error(f"目标不可达，终止扫描: {url},请检查网络或目标是否可达")
-            logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
-            return {"status": "unreachable"}
+                #探针 → 探是否打满
+                if probe(base):
+                    # 目标活着 → 刚才是并发打满 → 只跳当前这个模板
+                    return {"status": "skip"}
+                stop.set()           # 确认不可达，才按开关
+                logging.error(f"目标不可达，终止扫描: {url},请检查网络或目标是否可达")
+                logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
+                return {"status": "unreachable"}
 
         if status_requ =="continue":
             logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
@@ -209,7 +215,7 @@ def scan_template(base, file_tpl, num, total):
                 "status_code": requ.status_code,
                 "text": text,
                 }
-    
+
         #最后保护屏障
     except Exception as e:
             logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
@@ -244,6 +250,14 @@ def send_request(method,url,headers,timeout,p):
         logging.warning(f"请求失败: {e}")
         status_requ="continue"
     return cost_time,status_requ,requ
+
+#探针
+def probe(base, timeout=3):
+    try:
+        requests.get(base, timeout=timeout, proxies={'http': None, 'https': None})
+        return True
+    except requests.exceptions.RequestException:
+        return False
 
 #模板检查
 def data_check(required, data,num,total):
@@ -351,6 +365,7 @@ def match_time(m,requ,data,url,baseline_time):
                 detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
 
+#线程初始化设置
 local = threading.local()#每个线程各有一份属性
 policy = Retry(total=3, backoff_factor=0.3, 
                status_forcelist=[429, 500, 503, 504])#重放器策略
@@ -405,16 +420,24 @@ def main() -> None:
         return
     base = args.url.rstrip("/")
 
+    stop = threading.Event()   # 建一个开关
+
     #加载模板
     tpl_dir = Path(__file__).parent / "templates"
     files = sorted(tpl_dir.glob("*.yaml"))
     total = len(files)
+
+    #探针
+    if not probe(base):
+        logging.error(f"目标不可达，终止扫描: {base},请检查网络或目标是否可达")
+
+        return
     #并发限制max_workers=N
     with ThreadPoolExecutor(max_workers=3) as ex:
         futs = []
         for num,file_tpl in enumerate(files, start=1):
             #并发
-            futs.append(ex.submit(scan_template, base, file_tpl, num, total))
+            futs.append(ex.submit(scan_template, base, file_tpl, num, total,stop))
         for f in futs:
             r=f.result()
             if r["status"] == "skip":
