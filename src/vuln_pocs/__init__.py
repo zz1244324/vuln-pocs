@@ -124,7 +124,7 @@ def scan_template(base, file_tpl, num, total):
     try:
         data=load_template(file_tpl,num,total)
         if data is None:
-            return "continue"
+            return {"status": "skip"}
         logging.debug(f"[{num}/{total}] 加载模板: {data.get('name')} path={data.get('request', {}).get('path')}")
 
         #模板raw写法解析
@@ -144,12 +144,12 @@ def scan_template(base, file_tpl, num, total):
         #模板格式检查
         check = data_check(required, data,num,total)
         if check is False:
-            return "continue"
+            return {"status": "skip"}
 
         #专属检查
         check_matcher = data_check(matcher_required.get(data['matcher'].get('type')), data,num,total)
         if check_matcher is False:
-            return "continue"
+            return {"status": "skip"}
 
 
 
@@ -159,7 +159,7 @@ def scan_template(base, file_tpl, num, total):
         #判断请求类型
         if method not in ('GET', 'POST'):
             logging.warning(f"[{num}/{total}] {name} 不支持的请求方法: {method},跳过此模板")
-            return "continue"
+            return {"status": "skip"}
         #发送请求
         url=build_url(base,data['request']['path'])
         baseline_time,status_requ,requ=send_request(
@@ -172,11 +172,11 @@ def scan_template(base, file_tpl, num, total):
         if status_requ =="break":
             logging.error(f"目标不可达，终止扫描: {url},请检查网络或目标是否可达")
             logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
-            return "break"
+            return {"status": "unreachable"}
 
         if status_requ =="continue":
             logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
-            return "continue"
+            return {"status": "skip"}
 
         logging.debug(f"[{num}/{total}] 实际发出的头: {requ.request.headers}")
 
@@ -193,17 +193,27 @@ def scan_template(base, file_tpl, num, total):
         #不支持该类型的模板
         if func is None:
             logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
-            return "continue"
+            return {"status": "skip"}
         else:
             status, detail = func(m, requ, data, url, baseline_time)
 
 
         #输出结果
-        render(status,num,total,url,name,detail,requ.status_code,text)
+        return {
+                "status": status,
+                "num": num,
+                "total": total,
+                "url": url,
+                "name": name,
+                "detail": detail,
+                "status_code": requ.status_code,
+                "text": text,
+                }
+    
         #最后保护屏障
     except Exception as e:
             logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
-            return "continue"
+            return {"status": "skip"}
 
 
 
@@ -406,8 +416,12 @@ def main() -> None:
             #并发
             futs.append(ex.submit(scan_template, base, file_tpl, num, total))
         for f in futs:
-           f.result()
+            r=f.result()
+            if r["status"] == "skip":
+               continue
+            if r["status"] == "unreachable":
 
-
+                continue
+            render(**r)
 if __name__ == "__main__":
     main()
