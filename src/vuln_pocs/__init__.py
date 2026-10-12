@@ -225,6 +225,7 @@ def scan_template(base, file_tpl, num, total,stop):
 
 #发送请求
 def send_request(method,url,headers,timeout,p):
+
     #重新给s属性
     if getattr(local, 's', None) is None:
         local.s=requests.Session()#创建会话
@@ -237,6 +238,7 @@ def send_request(method,url,headers,timeout,p):
     logging.debug(f"session:{id(local.s)}")
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
+        rate_gate() #限速器
         t_start = time.perf_counter()
         requ=local.s.request(method,url,
                             headers=headers,
@@ -250,6 +252,22 @@ def send_request(method,url,headers,timeout,p):
         logging.warning(f"请求失败: {e}")
         status_requ="continue"
     return cost_time,status_requ,requ
+
+
+def rate_gate():
+    global rl_next
+    if rate <= 0:
+        return
+    with rl_lock:
+        now = time.monotonic()
+        wait = rl_next-now
+        if wait<0:
+            wait=0
+        rl_next =now+wait+1/rate
+    time.sleep(wait)
+
+
+
 
 #探针
 def probe(base, timeout=3):
@@ -372,6 +390,9 @@ policy = Retry(total=3, backoff_factor=0.3,
 adapter = HTTPAdapter(max_retries=policy)#适配装载器
 #创建会话在send_request函数
 
+rate = 0.0
+rl_lock = threading.Lock()
+rl_next = 0.0
 
 #模板表
 required = [
@@ -404,8 +425,12 @@ def main() -> None:
     p=argparse.ArgumentParser()
     p.add_argument("url", help="目标 URL :")
     p.add_argument("--v", action="store_true", help="详细输出debug信息")
+    p.add_argument("--rate", type=float, default=0,
+               help="每秒最多发几个请求,0 = 不限速")
     args = p.parse_args()
-
+    
+    global rate
+    rate=args.rate
     #logging配置
     logging.basicConfig(level=logging.DEBUG if args.v else logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s'
