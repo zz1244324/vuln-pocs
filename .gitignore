@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# 扫描结果（生成物，别提交）
+*.db

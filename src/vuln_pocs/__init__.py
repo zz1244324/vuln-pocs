@@ -6,11 +6,14 @@ from pathlib import Path
 import re
 import time
 import ast
+import sqlite3
+from datetime import datetime
+
+#并发
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from concurrent.futures import ThreadPoolExecutor
 import threading
-
 
 
 
@@ -253,7 +256,7 @@ def send_request(method,url,headers,timeout,p):
         status_requ="continue"
     return cost_time,status_requ,requ
 
-
+#限速器-->闸门限速
 def rate_gate():
     global rl_next
     if rate <= 0:
@@ -265,9 +268,6 @@ def rate_gate():
             wait=0
         rl_next =now+wait+1/rate
     time.sleep(wait)
-
-
-
 
 #探针
 def probe(base, timeout=3):
@@ -428,7 +428,7 @@ def main() -> None:
     p.add_argument("--rate", type=float, default=0,
                help="每秒最多发几个请求,0 = 不限速")
     args = p.parse_args()
-    
+
     global rate
     rate=args.rate
     #logging配置
@@ -447,29 +447,64 @@ def main() -> None:
 
     stop = threading.Event()   # 建一个开关
 
+    #建立数据库
+    conn = sqlite3.connect("result.db")
+    cur = conn.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target TEXT,
+    template_name TEXT,
+    url TEXT,
+    status TEXT,
+    detail TEXT,
+    scanned_at TEXT,
+    status_code INTEGER)""")
+
     #加载模板
     tpl_dir = Path(__file__).parent / "templates"
     files = sorted(tpl_dir.glob("*.yaml"))
     total = len(files)
 
-    #探针
+    #探针-->检查是否可达
     if not probe(base):
         logging.error(f"目标不可达，终止扫描: {base},请检查网络或目标是否可达")
 
         return
+
+    cur.execute("SELECT COUNT(*) FROM records")
+    db_start=cur.fetchone()[0]
+
     #并发限制max_workers=N
     with ThreadPoolExecutor(max_workers=3) as ex:
         futs = []
+        #加载模板引擎
         for num,file_tpl in enumerate(files, start=1):
             #并发
             futs.append(ex.submit(scan_template, base, file_tpl, num, total,stop))
+        
+        db_success=0 #成功的模板
+        db_skip=0  #跳过模板数
+        db_unreachable=0 #错误的模板数
         for f in futs:
             r=f.result()
             if r["status"] == "skip":
-               continue
-            if r["status"] == "unreachable":
-
+                db_skip+=1
                 continue
+            if r["status"] == "unreachable":
+                db_unreachable+=1
+                continue
+            db_success+=1
+            cur.execute("INSERT INTO records (target,template_name,url,status,detail,scanned_at, status_code) VALUES (?,?,?,?,?,?,?)",
+                (base,r['name'],r['url'],r['status'],r['detail'],datetime.now().isoformat(),r['status_code'] ))
             render(**r)
+    conn.commit()
+    cur.execute("SELECT COUNT(*) FROM records")
+    db_end=cur.fetchone()[0]
+    print(f"入库数:{db_success},\n数据库行数{db_end},\n错误{db_unreachable},\n跳过{db_skip}")
+    if db_end!=db_start+db_success:
+        logging.warning(f"数据库导入错误,期望是:{db_success+db_start},实际是:{db_end}")
+
+    conn.close()
+
 if __name__ == "__main__":
     main()
