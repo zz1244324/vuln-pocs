@@ -11,3 +11,5 @@ wheels/
 
 # 扫描结果（生成物，别提交）
 *.db
+reports/
+report_*.json

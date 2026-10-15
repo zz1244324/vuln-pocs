@@ -15,6 +15,7 @@ from requests.adapters import HTTPAdapter
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
+from .report import json_report
 
 
 #url构建
@@ -503,7 +504,8 @@ def main() -> None:
     print(f"入库数:{db_success},\n数据库行数{db_end},\n错误{db_unreachable},\n跳过{db_skip}")
     if db_end!=db_start+db_success:
         logging.warning(f"数据库导入错误,期望是:{db_success+db_start},实际是:{db_end}")
-
+ 
+    json_report("result.db",db_start)
     conn.close()
 
 if __name__ == "__main__":
