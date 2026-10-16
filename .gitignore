@@ -13,3 +13,7 @@ wheels/
 *.db
 reports/
 report_*.json
+
+# 本地文档：交接手册 + 个人情况（只本地用，不公开）
+AGENTS.md
+PRIVATE.md

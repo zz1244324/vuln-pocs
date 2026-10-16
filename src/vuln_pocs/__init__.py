@@ -424,7 +424,7 @@ matcher_table={
 def main() -> None:
     #参数设置
     p=argparse.ArgumentParser()
-    p.add_argument("url", help="目标 URL :")
+    p.add_argument("urls",nargs="+", help="目标 URL(多个) :")
     p.add_argument("--v", action="store_true", help="详细输出debug信息")
     p.add_argument("--rate", type=float, default=0,
                help="每秒最多发几个请求,0 = 不限速")
@@ -439,14 +439,8 @@ def main() -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
 
-    #判断url是否合法
-    if not args.url.startswith(("http://", "https://")):
-        logging.error(f"URL 不合法: {args.url}")
-        logging.error("必须以 http:// 或 https:// 开头")
-        return
-    base = args.url.rstrip("/")
-
-    stop = threading.Event()   # 建一个开关
+    url_continue=0
+    url_success=0
 
     #建立数据库
     conn = sqlite3.connect("result.db")
@@ -461,52 +455,79 @@ def main() -> None:
     scanned_at TEXT,
     status_code INTEGER)""")
 
-    #加载模板
-    tpl_dir = Path(__file__).parent / "templates"
-    files = sorted(tpl_dir.glob("*.yaml"))
-    total = len(files)
-
-    #探针-->检查是否可达
-    if not probe(base):
-        logging.error(f"目标不可达，终止扫描: {base},请检查网络或目标是否可达")
-
-        return
-
+    #基线
     cur.execute("SELECT COUNT(*) FROM records")
     db_start=cur.fetchone()[0]
 
-    #并发限制max_workers=N
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        futs = []
-        #加载模板引擎
-        for num,file_tpl in enumerate(files, start=1):
-            #并发
-            futs.append(ex.submit(scan_template, base, file_tpl, num, total,stop))
-        
-        db_success=0 #成功的模板
-        db_skip=0  #跳过模板数
-        db_unreachable=0 #错误的模板数
-        for f in futs:
-            r=f.result()
-            if r["status"] == "skip":
-                db_skip+=1
-                continue
-            if r["status"] == "unreachable":
-                db_unreachable+=1
-                continue
-            db_success+=1
-            cur.execute("INSERT INTO records (target,template_name,url,status,detail,scanned_at, status_code) VALUES (?,?,?,?,?,?,?)",
-                (base,r['name'],r['url'],r['status'],r['detail'],datetime.now().isoformat(),r['status_code'] ))
-            render(**r)
-    conn.commit()
+    #计数器
+    db_success=0 #成功的模板
+    db_skip=0  #跳过模板数
+    db_unreachable=0 #错误的模板数
+    for url in args.urls:
+        print("")
+        print(f"正在扫描第 {url_success+url_continue+1} 个网段,url:{url}")
+        print("")
+        #判断url是否合法
+        if not url.startswith(("http://", "https://")):
+            logging.error(f"URL 不合法: {url}")
+            logging.error("必须以 http:// 或 https:// 开头")
+            url_continue+=1
+            continue
+
+        base = url.rstrip("/")
+
+        stop = threading.Event()   # 建一个开关
+
+
+        #加载模板
+        tpl_dir = Path(__file__).parent / "templates"
+        files = sorted(tpl_dir.glob("*.yaml"))
+        total = len(files)
+
+        #探针-->检查是否可达
+        if not probe(base):
+            logging.error(f"目标不可达，终止扫描: {base},请检查网络或目标是否可达")
+            url_continue+=1
+            continue
+
+
+        #并发限制max_workers=N
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            futs = []
+            #加载模板引擎
+            for num,file_tpl in enumerate(files, start=1):
+                #并发
+                futs.append(ex.submit(scan_template, base, file_tpl, num, total,stop))
+
+            for f in futs:
+                r=f.result()
+                if r["status"] == "skip":
+                    db_skip+=1
+                    continue
+                if r["status"] == "unreachable":
+                    db_unreachable+=1
+                    continue
+                db_success+=1
+                cur.execute("INSERT INTO records (target,template_name,url,status,detail,scanned_at, status_code) VALUES (?,?,?,?,?,?,?)",
+                    (base,r['name'],r['url'],r['status'],r['detail'],datetime.now().isoformat(),r['status_code'] ))
+                render(**r)
+        url_success+=1
+        conn.commit()
+
+    print("")
+    print("完成扫描,结果如下:")
     cur.execute("SELECT COUNT(*) FROM records")
     db_end=cur.fetchone()[0]
+
     print(f"入库数:{db_success},\n数据库行数{db_end},\n错误{db_unreachable},\n跳过{db_skip}")
+
     if db_end!=db_start+db_success:
         logging.warning(f"数据库导入错误,期望是:{db_success+db_start},实际是:{db_end}")
- 
-    json_report("result.db",db_start)
+
+    json_report("result.db",db_start) #保存json报告
+
     conn.close()
 
+    logging.warning(f",扫描结束,总共有 {url_success+url_continue} 个网段,不可达为 {url_continue} 个")
 if __name__ == "__main__":
     main()
