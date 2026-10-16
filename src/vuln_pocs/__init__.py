@@ -456,7 +456,7 @@ def main() -> None:
     status_code INTEGER)""")
 
     #基线
-    cur.execute("SELECT COUNT(*) FROM records")
+    cur.execute("SELECT COALESCE(MAX(id), 0) FROM records")
     db_start=cur.fetchone()[0]
 
     #计数器
