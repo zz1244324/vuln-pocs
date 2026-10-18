@@ -1,0 +1,10 @@
+name: tomcat-weak-pass
+request:
+ path: "/manager/html"
+ method: GET
+ headers:
+  Authorization: "Basic dG9tY2F0OnRvbWNhdA=="
+
+matcher:
+  type: word
+  words: ["Tomcat Web Application Manager"]

