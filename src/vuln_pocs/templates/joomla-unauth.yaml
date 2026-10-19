@@ -1,0 +1,8 @@
+name: joomla-unauth
+request:
+  path: /api/index.php/v1/config/application?public=true
+  method: GET
+
+matcher:
+  type: word
+  words: ['"password":"']
