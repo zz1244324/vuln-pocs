@@ -1,0 +1,12 @@
+name: ssrf
+request:
+ path: "/"
+ method: GET
+ param:
+  name: "{{7*'7'}}"
+  
+ 
+
+matcher:
+  type: word
+  words: ["7777777"]
