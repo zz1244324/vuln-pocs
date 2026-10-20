@@ -111,7 +111,7 @@ def calc(node,values):
 def render(status,num,total,url,name,detail,status_code,text):
     #击中
     if status=="hit":
-        logging.warning(f"[{num}/{total}] {url} 命中漏洞,模板名:{name}{detail}")
+        logging.warning(f"[{num}/{total}] {url} 命中漏洞,模板名:{name}:{detail}")
     #错误
     elif status=="broken":
         logging.error(f"[{num}/{total}] {url} 规则无效,模板名:{name},原因:{detail}")
@@ -297,16 +297,22 @@ def match_status(m,requ,data,url,baseline_time):
 
     if requ.status_code == m.get('status'):
         status="hit"
+        detail = f"状态码:{requ.status_code}"
     return  status, detail
 
 #特征词判断
 def match_word(m,requ,data,url,baseline_time):
     status="clean" 
     detail=""
-    for word in m.get('words'):
-        if word in requ.text:
-            status="hit"
-            break
+    if isinstance(m.get('words'), list):
+        for word in m.get('words'):
+            if word in requ.text:
+                status="hit"
+                detail = f"命中词:{word}"
+                break
+    else:
+        status="broken"
+        detail="words必须是列表,该模板words不是列表"
     return  status, detail
 
 #正则匹配判断
@@ -324,8 +330,13 @@ def match_regex(m,requ,data,url,baseline_time):
             bad += 1
             continue
         try:
-            if re.search(pattern, requ.text , re.I | re.S):
+            match_result = re.search(pattern, requ.text , re.I | re.S)
+            if match_result:
+                matched=match_result.group(0)
                 status="hit"
+                if len(matched) > 30:
+                    matched = matched[:30] + "..."
+                detail = f"命中正则:{pattern},匹配内容:{matched}"
                 break
         except re.error as e:
             status="broken"
@@ -345,9 +356,11 @@ def match_size(m,requ,data,url,baseline_time):
     if 'not_size' in m:
         if abs(len(requ.content) - m['not_size']) > m.get('tolerance', 0):
             status="hit"
+            detail = f"实际:{len(requ.content)},期望非:{m['not_size']},差:{abs(len(requ.content) - m['not_size'])}"
     elif 'size' in m:
         if len(requ.content) ==m.get('size'):
             status="hit"
+            detail = f"实际长度:{len(requ.content)}"
     else:
         status="empty"
     return  status, detail
@@ -381,7 +394,7 @@ def match_time(m,requ,data,url,baseline_time):
         else:
             if payload_time - baseline_time > m.get('tolerance', m['sleep'] / 2):
                 status = "hit"
-                detail=f",基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
+                detail=f"基线:{baseline_time:.2f},payloadtime:{payload_time:.2f}"
     return  status, detail
 
 #线程初始化设置
