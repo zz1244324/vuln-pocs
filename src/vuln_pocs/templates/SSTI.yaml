@@ -1,18 +1,14 @@
 name: ssti
 request:
- path: "/uddiexplorer/SearchPublicRegistries.jsp"
+ path: "/"
  method: GET
  param:
-  rdoSearch: name
-  txtSearchname: sdf
-  txtSearchkey: ""
-  txtSearchfor: ""
-  selfor: Business location
-  btnSubmit: Search
-  operator: "http://127.0.0.1:1"
-
+  name: "{{7*'7'}}"
+  
  
 
 matcher:
   type: word
-  words: ["could not connect over HTTP to server:"]
+  words: ["7777777"]
+
+name: ssti

