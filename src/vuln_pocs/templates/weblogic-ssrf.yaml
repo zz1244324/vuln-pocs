@@ -11,8 +11,6 @@ request:
   btnSubmit: Search
   operator: "http://127.0.0.1:1"
 
- 
-
 matcher:
   type: word
   words: ["could not connect over HTTP to server:"]

@@ -5,10 +5,7 @@ request:
  param:
   name: "{{7*'7'}}"
   
- 
-
 matcher:
   type: word
   words: ["7777777"]
 
-name: ssti
