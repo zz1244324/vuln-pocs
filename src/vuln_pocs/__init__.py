@@ -28,14 +28,6 @@ def build_url (base,path):
         url = base + path
     return url
 
-#raw解析后处理
-def render_request(data, base,variables):
-    method,path,headers, body = raw(data.get('request').get('raw'))
-    path = replace(path, variables)
-    body=replace(body, variables)
-    headers = {k: replace(v, variables) for k, v in headers.items()}
-    url=build_url (base,path)
-    return method, url, headers, body
 
 #模板导入
 def load_template(file_tpl,num,total):
@@ -470,9 +462,13 @@ def main() -> None:
     p.add_argument("--v", action="store_true", help="详细输出debug信息")
     p.add_argument("--rate", type=float, default=0,
                help="每秒最多发几个请求,0 = 不限速")
+    p.add_argument("--workers", type=int, default=3,
+               help="线程数量")
     args = p.parse_args()
 
     global rate
+    global workers
+    workers=args.workers
     rate=args.rate
     #logging配置
     logging.basicConfig(level=logging.DEBUG if args.v else logging.INFO,
@@ -538,7 +534,7 @@ def main() -> None:
 
 
         #并发限制max_workers=N
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             futs = []
             #加载模板引擎
             for num,file_tpl in enumerate(files, start=1):
