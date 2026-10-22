@@ -147,8 +147,10 @@ def scan_template(base, file_tpl, num, total,stop):
                 data['request']['timeout']=tuple(data['request'].get('timeout'))
 
         #模板格式检查
+
+        keys_unknown=unknown_keys(data,known_schema,"", num, total)
         check = data_check(required, data,num,total)
-        if check is False:
+        if check is False or keys_unknown is  False:
             return {"status": "skip"}
 
         #专属检查
@@ -278,7 +280,7 @@ def probe(base, timeout=3):
     except requests.exceptions.RequestException:
         return False
 
-#模板检查
+#模板检查(缺少)
 def data_check(required, data,num,total):
     for path in required:
         cur = data
@@ -288,6 +290,24 @@ def data_check(required, data,num,total):
                 return False
             cur = cur[key]
     return True
+
+#模板检查(多余)
+def unknown_keys(actual, known, prefix, num, total):
+    if not isinstance(actual, dict) or not isinstance(known, dict):
+        return True
+    ok = True
+    for key in actual:
+        path = (prefix + "." + key).lstrip(".")
+        if key not in known:
+            logging.warning(f"模板[{num}/{total}]出现错误字段: {path},跳过此模板，请检查拼写")
+            ok = False
+        else:
+            if not unknown_keys(actual[key], known[key], path, num, total):
+                ok = False
+    return ok
+
+
+
 
 
 #状态判断
@@ -407,6 +427,15 @@ adapter = HTTPAdapter(max_retries=policy)#适配装载器
 rate = 0.0
 rl_lock = threading.Lock()
 rl_next = 0.0
+
+#白名单树
+known_schema = {
+    'name': None,
+    'request': {'method': None, 'path': None, 'headers': None, 'param': None,
+                'payload': None, 'timeout': None, 'raw': None},
+    'matcher': {'type': None, 'words': None, 'status': None, 'regex': None,
+                'size': None, 'not_size': None, 'tolerance': None, 'sleep': None},
+}
 
 #模板表
 required = [
