@@ -166,6 +166,7 @@ def scan_template(base, file_tpl, num, total,stop):
             data['request'].get('headers'),
             data['request'].get('timeout', 5),
             data['request'].get('param'),
+            stop
             )
         #网络异常
         if status_requ =="break":
@@ -199,7 +200,7 @@ def scan_template(base, file_tpl, num, total,stop):
             logging.warning(f"[{num}/{total}] {name} 不支持的匹配类型: {m['type']},跳过此模板")
             return {"status": "skip"}
         else:
-            status, detail = func(m, requ, data, url, baseline_time)
+            status, detail = func(m, requ, data, url, baseline_time,stop)
 
 
         #输出结果
@@ -222,7 +223,7 @@ def scan_template(base, file_tpl, num, total,stop):
 
 
 #发送请求
-def send_request(method,url,headers,timeout,p):
+def send_request(method,url,headers,timeout,p,stop):
 
     #重新给s属性
     if getattr(local, 's', None) is None:
@@ -236,7 +237,7 @@ def send_request(method,url,headers,timeout,p):
     logging.debug(f"session:{id(local.s)}")
     kwargs = {'params': p} if method == 'GET' else {'data': p}
     try:
-        rate_gate() #限速器
+        rate_gate(stop) #限速器
         t_start = time.perf_counter()
         requ=local.s.request(method,url,
                             headers=headers,
@@ -252,7 +253,7 @@ def send_request(method,url,headers,timeout,p):
     return cost_time,status_requ,requ
 
 #限速器-->闸门限速
-def rate_gate():
+def rate_gate(stop):
     global rl_next
     if rate <= 0:
         return
@@ -262,7 +263,7 @@ def rate_gate():
         if wait<0:
             wait=0
         rl_next =now+wait+1/rate
-    time.sleep(wait)
+    stop.wait(wait)
 
 #探针
 def probe(base, timeout=3):
@@ -303,7 +304,7 @@ def unknown_keys(actual, known, prefix, num, total):
 
 
 #状态判断
-def match_status(m,requ,data,url,baseline_time):
+def match_status(m,requ,data,url,baseline_time,stop):
     status="clean" 
     detail=""
 
@@ -313,7 +314,7 @@ def match_status(m,requ,data,url,baseline_time):
     return  status, detail
 
 #特征词判断
-def match_word(m,requ,data,url,baseline_time):
+def match_word(m,requ,data,url,baseline_time,stop):
     status="clean" 
     detail=""
     if isinstance(m.get('words'), list):
@@ -328,7 +329,7 @@ def match_word(m,requ,data,url,baseline_time):
     return  status, detail
 
 #正则匹配判断
-def match_regex(m,requ,data,url,baseline_time):
+def match_regex(m,requ,data,url,baseline_time,stop):
     status="clean" 
     detail=""
     bad=0
@@ -361,7 +362,7 @@ def match_regex(m,requ,data,url,baseline_time):
     return  status, detail
 
 #长度判断
-def match_size(m,requ,data,url,baseline_time):
+def match_size(m,requ,data,url,baseline_time,stop):
     status="clean" 
     detail=""
 
@@ -378,7 +379,7 @@ def match_size(m,requ,data,url,baseline_time):
     return  status, detail
 
 #时间判断
-def match_time(m,requ,data,url,baseline_time):
+def match_time(m,requ,data,url,baseline_time,stop):
     status="clean" 
     detail=""
     if not isinstance(data['request'].get('param', {}), dict) or not isinstance(data['request'].get('payload', {}), dict):
@@ -398,7 +399,8 @@ def match_time(m,requ,data,url,baseline_time):
         payload_time,status_requ_payload,requ2=send_request(method,url,
                       data['request'].get('headers'),
                       data['request'].get('timeout', 5),
-                      payload_params)
+                      payload_params,
+                      stop)
 
         if status_requ_payload:
             detail="request测试请求失败"
@@ -502,6 +504,8 @@ def main() -> None:
     db_success=0 #成功的模板
     db_skip=0  #跳过模板数
     db_unreachable=0 #错误的模板数
+    interrupted = False  #是否中断
+
     for url in args.urls:
 
         hit_count=0 #命中的模板数
@@ -534,7 +538,8 @@ def main() -> None:
 
 
         #并发限制max_workers=N
-        with ThreadPoolExecutor(max_workers=workers) as ex:
+        ex = ThreadPoolExecutor(max_workers=workers)
+        try:
             futs = []
             #加载模板引擎
             for num,file_tpl in enumerate(files, start=1):
@@ -556,9 +561,19 @@ def main() -> None:
                 cur.execute("INSERT INTO records (target,template_name,url,status,detail,scanned_at, status_code) VALUES (?,?,?,?,?,?,?)",
                     (base,r['name'],r['url'],r['status'],r['detail'],datetime.now().isoformat(),r['status_code'] ))
                 render(**r)
+        except KeyboardInterrupt:
+            stop.set()
+            logging.warning("收到 Ctrl+C,正在停止扫描")
+            interrupted = True
+        finally:
+            ex.shutdown(wait=False, cancel_futures=True)
         url_hit[url]=hit_count
         url_success+=1
         conn.commit()
+        #中断
+        if interrupted:
+            break
+
 
     print("")
     print("完成扫描,结果如下:")
