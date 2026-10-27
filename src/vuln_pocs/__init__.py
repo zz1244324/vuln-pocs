@@ -14,6 +14,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from concurrent.futures import ThreadPoolExecutor
 import threading
+from concurrent.futures import as_completed
 
 from .report import json_report
 
@@ -103,17 +104,17 @@ def calc(node,values):
 def render(status,num,total,url,name,detail,status_code,text):
     #击中
     if status=="hit":
-        logging.warning(f"[{num}/{total}] {url} 命中漏洞,模板名:{name}:{detail}")
+        logging.warning(f"{url} 命中漏洞,模板名:{name}:{detail}")
     #错误
     elif status=="broken":
-        logging.error(f"[{num}/{total}] {url} 规则无效,模板名:{name},原因:{detail}")
+        logging.error(f"{url} 规则无效,模板名:{name},原因:{detail}")
     #找不到规则
     elif status=="empty":
-        logging.error(f"[{num}/{total}] {url} 规则为空,模板名:{name}")
+        logging.error(f"{url} 规则为空,模板名:{name}")
     #没命中
     else:
-        logging.info(f"[{num}/{total}] {url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
-        logging.debug(f"[{num}/{total}] 响应内容: {text}")
+        logging.info(f"{url} 没发现漏洞,模板名:{name},响应状态:{status_code}")
+        logging.debug(f" 响应内容: {text}")
 
 #运行模板规则
 def scan_template(base, file_tpl, num, total,stop):
@@ -175,9 +176,7 @@ def scan_template(base, file_tpl, num, total,stop):
                     # 目标活着 → 刚才是并发打满 → 只跳当前这个模板
                     return {"status": "skip"}
                 stop.set()           # 确认不可达，才按开关
-                logging.error(f"目标不可达，终止扫描: {url},请检查网络或目标是否可达")
-                logging.error(f"[{num}/{total}] 模板中断,还剩[{total-num}]个模板未跑")
-                return {"status": "unreachable"}
+                return {"status": "unreachable", "num": num, "url": url, "name": name}
 
         if status_requ =="continue":
             logging.warning(f"网络问题,跳过[{num}/{total}] 模板")
@@ -506,12 +505,14 @@ def main() -> None:
     db_unreachable=0 #错误的模板数
     interrupted = False  #是否中断
 
-    for url in args.urls:
 
+    for url in args.urls:
+        unreachable_reported = False #是否报告过不可达
         hit_count=0 #命中的模板数
+        done = 0  #完成的模板数
 
         print("")
-        print(f"正在扫描第 {url_success+url_continue+1} 个网段,url:{url}")
+        print(f"正在扫描第 {url_success+url_continue+1} 个网段,url:{url}", flush=True)
         print("")
         #判断url是否合法
         if not url.startswith(("http://", "https://")):
@@ -546,13 +547,20 @@ def main() -> None:
                 #并发
                 futs.append(ex.submit(scan_template, base, file_tpl, num, total,stop))
 
-            for f in futs:
+            for f in as_completed(futs):
+                print("")
                 r=f.result()
+                done+=1
+                print(f"[进度 {done}/{total}] {r.get('name', '?')}: {r['status']}")
                 if r["status"] == "skip":
                     db_skip+=1
                     continue
                 if r["status"] == "unreachable":
                     db_unreachable+=1
+                    if not unreachable_reported:
+                        logging.error(f"目标不可达，终止扫描: {base}，在模板 {r.get('name')} 上发现")
+                        unreachable_reported = True
+    
                     continue
                 if r["status"] == "hit":
                     hit_count+=1

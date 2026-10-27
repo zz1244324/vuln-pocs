@@ -11,7 +11,7 @@ def json_report(db_path,since_id):
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    cur = conn.execute("SELECT * FROM records WHERE id > ?", (since_id,))
+    cur = conn.execute("SELECT * FROM records WHERE id > ? ORDER BY template_name, id", (since_id,))
     rows = cur.fetchall()
     new_rows = []
 
