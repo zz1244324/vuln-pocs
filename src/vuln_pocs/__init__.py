@@ -216,9 +216,8 @@ def scan_template(base, file_tpl, num, total,stop):
 
         #最后保护屏障
     except Exception as e:
-            logging.error(f"[{num}/{total}] 模板处理异常,跳过,错误为: {e}")
+            logging.exception(f"[{num}/{total}] 执行异常: {e}")
             return {"status": "skip"}
-
 
 
 #发送请求
@@ -502,15 +501,16 @@ def main() -> None:
     url_hit={}#击中总结表
     db_success=0 #成功的模板
     db_skip=0  #跳过模板数
-    db_unreachable=0 #错误的模板数
+    db_unreachable=0 #模板不可达
     interrupted = False  #是否中断
+
 
 
     for url in args.urls:
         unreachable_reported = False #是否报告过不可达
         hit_count=0 #命中的模板数
         done = 0  #完成的模板数
-
+    
         print("")
         print(f"正在扫描第 {url_success+url_continue+1} 个网段,url:{url}", flush=True)
         print("")
@@ -549,9 +549,10 @@ def main() -> None:
 
             for f in as_completed(futs):
                 print("")
+    
                 r=f.result()
                 done+=1
-                print(f"[进度 {done}/{total}] {r.get('name', '?')}: {r['status']}")
+                print(f"[进度 {done}/{total}] {r.get('name', '?')}: {r['status']}",flush=True)
                 if r["status"] == "skip":
                     db_skip+=1
                     continue
@@ -560,11 +561,9 @@ def main() -> None:
                     if not unreachable_reported:
                         logging.error(f"目标不可达，终止扫描: {base}，在模板 {r.get('name')} 上发现")
                         unreachable_reported = True
-    
                     continue
                 if r["status"] == "hit":
                     hit_count+=1
-
                 db_success += 1
                 cur.execute("INSERT INTO records (target,template_name,url,status,detail,scanned_at, status_code) VALUES (?,?,?,?,?,?,?)",
                     (base,r['name'],r['url'],r['status'],r['detail'],datetime.now().isoformat(),r['status_code'] ))
@@ -592,7 +591,7 @@ def main() -> None:
     cur.execute("SELECT COUNT(*) FROM records")
     db_end=cur.fetchone()[0]
 
-    print(f"入库数:{db_success},数据库行数:{db_end},\n错误:{db_unreachable},跳过:{db_skip}")
+    print(f"入库数:{db_success},数据库行数:{db_end},\n不可达:{db_unreachable},\n跳过:{db_skip}")
 
     if db_end!=db_start+db_success:
         logging.warning(f"数据库导入错误,期望是:{db_success+db_start},实际是:{db_end}")
