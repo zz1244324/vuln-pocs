@@ -7,41 +7,66 @@
 ### 快速开始
 
 需要 Python 3.12 + uv
+
 ```bash
   uv sync                      # 装依赖
-  uv run vuln-pocs <目标URL>
+  uv run vuln-pocs <目标URL1> <目标URL2> #支持多url扫描
 ```
 
 在sqli-lab中的代码演示图
 
 ```bash
-2026-10-10 19:45:46,699 - INFO - [1/6] http://127.0.0.1:8594/index.php.bak 没发现漏洞,模板名:bak-exposed,响应状态:404
-2026-10-10 19:45:48,768 - WARNING - [2/6] http://127.0.0.1:8594/Less-11/ 命中漏洞,模板名:less11-post-sqli
-2026-10-10 19:45:48,769 - WARNING - [3/6] http://127.0.0.1:8594/Less-11/ 命中漏洞,模板名:less11-raw
-2026-10-10 19:45:55,841 - WARNING - [4/6] http://127.0.0.1:8594/Less-9/ 命中漏洞,模板名:less9-time-blind,基线:2.07,payloadtime:7.07
-2026-10-10 19:45:55,841 - WARNING - [5/6] http://127.0.0.1:8594/Less-1/ 命中漏洞,模板名:sqli-error
-2026-10-10 19:45:55,841 - WARNING - [6/6] http://127.0.0.1:8594/Less-18/ 命中漏洞,模板名:xff-spoof
+[进度 1/14] joomla-unauth: clean
+2026-11-01 19:28:24,461 - INFO - http://127.0.0.1:8594/api/index.php/v1/config/application?public=true 没发现漏洞,模板名:joomla-unauth,响应状态:404
+[进度 2/14] bak-exposed: clean
+2026-11-01 19:28:24,475 - INFO - http://127.0.0.1:8594/index.php.bak 没发现漏洞,模板名:bak-exposed,响应状态:404
+[进度 3/14] less11-raw: hit
+2026-11-01 19:28:26,548 - WARNING - http://127.0.0.1:8594/Less-11/ 命中漏洞,模板名:less11-raw:命中词:Your Login name
+[进度 4/14] nginx-alias: clean
+2026-11-01 19:28:26,551 - INFO - http://127.0.0.1:8594/files../etc/passwd 没发现漏洞,模板名:nginx-alias,响应状态:404
+[进度 5/14] phpunit-rce: clean
+2026-11-01 19:28:26,553 - INFO - http://127.0.0.1:8594/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php 没发现漏洞,模板名:phpunit-rce,响应状态:404
+[进度 6/14] shiro-deser: clean
+2026-11-01 19:28:26,557 - INFO - http://127.0.0.1:8594/ 没发现漏洞,模板名:shiro-deser,响应状态:200
+[进度 7/14] less11-post-sqli: hit
+2026-11-01 19:28:26,701 - WARNING - http://127.0.0.1:8594/Less-11/ 命中漏洞,模板名:less11-post-sqli:命中词:Your Login name
+[进度 8/14] ssti: clean
+2026-11-01 19:28:26,705 - INFO - http://127.0.0.1:8594/ 没发现漏洞,模板名:ssti,响应状态:200
+[进度 9/14] thinkphp5-rce: clean
+2026-11-01 19:28:26,709 - INFO - http://127.0.0.1:8594/index.php?s=/Index/%5Cthink%5Capp/invokefunction&function=call_user_func_array&vars[0]=phpinfo&vars[1][]=-1 没发现漏洞,模板名:thinkphp5-rce,响应状态:404
+[进度 10/14] tomcat-weak-pass: clean
+2026-11-01 19:28:26,712 - INFO - http://127.0.0.1:8594/manager/html 没发现漏洞,模板名:tomcat-weak-pass,响应状态:404
+[进度 11/14] weblogic-ssrf: clean
+2026-11-01 19:28:26,717 - INFO - http://127.0.0.1:8594/uddiexplorer/SearchPublicRegistries.jsp 没发现漏洞,模板名:weblogic-ssrf,响应状态:404
+[进度 12/14] sqli-error: hit
+2026-11-01 19:28:28,616 - WARNING - http://127.0.0.1:8594/Less-1/ 命中漏洞,模板名:sqli-error:命中词:You have an error in your SQL syntax
+[进度 13/14] xff-spoof: hit
+2026-11-01 19:28:28,762 - WARNING - http://127.0.0.1:8594/Less-18/ 命中漏洞,模板名:xff-spoof:命中正则:<title>Less-18[^<]*</title>,匹配内容:<title>Less-18 Header Injectio...
+[进度 14/14] less9-time-blind: hit
+2026-11-01 19:28:33,804 - WARNING - http://127.0.0.1:8594/Less-9/ 命中漏洞,模板名:less9-time-blind:基线:2.25,payloadtime:7.07
 ```
 
 ![运行效果](docs/d_1.png)
 
 ```bash
-  实测时间盲注,post型sql,未授权访问,sql注入
+  实测时间盲注,post型注入、报错注入、XFF头注入
 
 ```
 
 ### 模式
 ```bash
   uv run vuln-pocs <目标URL> --v #详细输出扫描日志
+  uv run vuln-pocs <目标URL> --rate N ##每秒最多发 N 个请求
+  uv run vuln-pocs <目标URL> --workers N #N为设置并发数(默认为3)
 
 ```
-![加--v运行效果](docs/d_2.png)
+
 
 ### 功能
 
 ```bash
-  1.并发:支持并发,修改 max_workers 参数
-  2.raw报文解析:见下图模板格式(目前不支持多发请求,比如盲注)
+  1.已是命令行参数：--workers N（默认 3）
+  2.raw报文解析:见下图模板格式
   3.ast白名单:允许自己设置白名单,目前支持数字常量（int / float） · 变量名 · + · *
   4.探针:用去检查目标是否挂了,会在开始先测试一次可通性
 
@@ -79,7 +104,7 @@ raw报文解析式:
 
 | type | 该填的字段名 | 说明 |
 |---|---|---|
-| `status` | `status` | 期望状态码 |
+| `status` | `status` | 期望状态码 ⚠️ 仅协议级证据，勿单独作为判定 |
 | `word` | `words` | 特征词列表，命中任一即算 |
 | `regex` | `regex` | 正则列表 |
 | `size` | `size` / `not_size` | 期望长度 / 排除长度 |
@@ -103,7 +128,30 @@ raw报文解析式:
 | `match_*` | 漏洞判断分派 | `status` / `word` / `regex` / `size` / `time` |
 | `render` | 结果输出 | 主线程调用，保证日志顺序 |
 
+
+### 输出文件
+
+```bash
+result.db —— SQLite 库，含每次入库记录
+reports/json_report_<时间戳>.json —— JSON 报告
+
+
+```
+```bash
+扫描结束后会在末尾输出入库数
+```
+![运行效果](docs/d_2.png)
+
+### 注意事项
+```bash
+1.库里只记“真跑过并出结论”的——skip / unreachable 不入库
+2.status 型只能证明服务器返回了该状态码，不能证明文件或漏洞存在，须配合 word / regex 内容判据使用
+
+```
+
+
 ### 已知限制
 ```bash
-  --v 并发未做排序,只有 DEBUG 行来自各 worker、会交织
+  1.目前只支持post,get,raw三种请求方式
+  2.目前只支持status,word,regex,size,time五种匹配方式
 ```
