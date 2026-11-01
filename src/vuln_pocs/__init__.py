@@ -600,6 +600,6 @@ def main() -> None:
 
     conn.close()
 
-    logging.warning(f",扫描结束,总共有 {url_success+url_continue} 个网段,不可达为 {url_continue} 个")
+    logging.warning(f"扫描结束,总共有 {url_success+url_continue} 个网段,不可达为 {url_continue} 个")
 if __name__ == "__main__":
     main()

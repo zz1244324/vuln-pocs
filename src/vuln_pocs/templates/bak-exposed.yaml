@@ -2,5 +2,5 @@ name: bak-exposed
 request:
   path: /index.php.bak
 matcher:
-  type: status
-  status: 200
+  type: word
+  words: ["<?php"]
