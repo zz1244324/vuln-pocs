@@ -1,10 +1,10 @@
 [project]
 name = "vuln-pocs"
 version = "0.1.0"
-description = "Add your description here"
+description = "YAML-template-driven web vulnerability scanner (CLI)"
 readme = "README.md"
 authors = [
-    { name = "zz1244324", email = "3560678192@qq.com" }
+    { name = "zz1244324" }
 ]
 requires-python = ">=3.12"
 dependencies = [
